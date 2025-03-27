@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2024-09-16
+// @version      2025-03-27
 // @description  try to take over the world!
 // @author       https://github.com/michaelrosstarr
 // @match        https://www.waze.com/en-US/*
@@ -9,10 +9,11 @@
 // @grant        none
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     let modalOpen = false;
+    let currentIssueId = null; // Track current issue ID
     const dates = {
         "Jan": "January",
         "Feb": "Feburary",
@@ -70,15 +71,48 @@ If we don't hear from you soon, we will assume that this is no longer and issue 
     }
 
     function checkModal() {
-        const modal = document.querySelector('.mapUpdateRequest.panel.show');
-        if (modal && !modalOpen) {
+        // Update selector to focus ONLY on mapUpdateRequest class
+        const modal = document.querySelector('.mapUpdateRequest');
+
+        if (modal) {
             console.log('Update Request modal is open');
-            modalOpen = true;
-            insertButton(modal);
-        } else if (!modal && modalOpen) {
+
+            // Get a unique identifier for the current issue
+            const newIssueId = getIssueIdentifier(modal);
+
+            // Check if this is a new issue or first time seeing panel
+            const isNewIssue = (newIssueId !== currentIssueId);
+
+            if (!modalOpen || isNewIssue) {
+                console.log(isNewIssue ? 'Content changed to new issue' : 'Panel newly opened');
+                modalOpen = true;
+                currentIssueId = newIssueId;
+
+                // For new issues or first-time opens, we should insert buttons
+                insertButton(modal);
+            } else if (!modal.querySelector('.ez-comment-button')) {
+                // If buttons aren't there (regardless of issue ID), try to insert them
+                console.log('Buttons not found, adding them...');
+                insertButton(modal);
+            }
+        } else if (modalOpen) {
             console.log('Update Request modal is closed');
             modalOpen = false;
+            currentIssueId = null;
         }
+    }
+
+    // Get a unique identifier for the current issue
+    function getIssueIdentifier(modal) {
+        // Try to find an ID or other unique identifier in the panel
+        const idElement = modal.querySelector('.issue-id');
+        if (idElement) {
+            return idElement.textContent.trim();
+        }
+
+        // Fallback: use a combination of title and date
+        const [title, date] = extractIssueDetails();
+        return `${title}__${date}`;
     }
 
     function extractIssueDetails() {
@@ -106,102 +140,147 @@ If we don't hear from you soon, we will assume that this is no longer and issue 
     }
 
     function insertButton(modal) {
-        setTimeout(() => {
-            const commentList = modal.querySelector('.conversation-view .comment-list');
-            const newCommentForm = modal.querySelector('.conversation-view .new-comment-form');
-            console.log(modal, commentList, newCommentForm);
+        console.log('Attempting to insert buttons to modal:', modal);
 
-            if (commentList && newCommentForm) {
-                if (!modal.querySelector('.ez-comment-button')) {
+        const commentList = modal.querySelector('.conversation-view .comment-list');
+        const newCommentForm = modal.querySelector('.conversation-view .new-comment-form');
 
-                    const extracted = extractIssueDetails();
+        if (!commentList || !newCommentForm) {
+            console.log('Required elements not found, will retry on next check');
+            return;
+        }
 
-                    // First Button
-                    const wzButton = document.createElement('wz-button');
-                    wzButton.setAttribute('type', 'button');
-                    wzButton.setAttribute('style', 'margin-bottom: 5px');
-                    wzButton.setAttribute('disabled', 'false');
-                    wzButton.classList.add('send-button', 'ez-comment-button');
-                    wzButton.textContent = 'Initial';
+        if (modal.querySelector('.ez-comment-button')) {
+            console.log('Buttons already exist in the modal');
+            return;
+        }
 
-                    commentList.parentNode.insertBefore(wzButton, newCommentForm);
+        try {
+            const extracted = extractIssueDetails();
+            console.log('Extracted issue details:', extracted);
 
-                    wzButton.addEventListener('click', () => {
-                        const wzTextarea = modal.querySelector('.new-comment-form wz-textarea');
-                        if (wzTextarea) {
-                            wzTextarea.setAttribute('value', firstMessage(extracted[0], extracted[1]));
-                            wzTextarea.dispatchEvent(new Event('input'));
-                        }
-                    });
+            // Create buttons with a consistent approach
+            const createButton = (text, messageFunction, marginBottom = '5px') => {
+                const button = document.createElement('wz-button');
+                button.setAttribute('type', 'button');
+                button.setAttribute('style', `margin-bottom: ${marginBottom}`);
+                button.setAttribute('disabled', 'false');
+                button.setAttribute('data-ez-comment-type', text.toLowerCase().replace(/\s+/g, '-'));
+                button.classList.add('send-button', 'ez-comment-button');
+                button.textContent = text;
+                button.id = 'ez-comment-' + text.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(); // Unique ID
 
-                    // Second Button
-                    const followUp = document.createElement('wz-button');
-                    followUp.setAttribute('type', 'button');
-                    followUp.setAttribute('style', 'margin-bottom: 5px');
-                    followUp.setAttribute('disabled', 'false');
-                    followUp.classList.add('send-button', 'ez-comment-button');
-                    followUp.textContent = 'Follow Up';
-                    commentList.parentNode.insertBefore(followUp, newCommentForm);
+                button.addEventListener('mousedown', () => {
+                    const wzTextarea = modal.querySelector('.new-comment-form wz-textarea');
+                    if (wzTextarea) {
+                        wzTextarea.setAttribute('value', messageFunction(extracted[0], extracted[1]));
+                        wzTextarea.dispatchEvent(new Event('input'));
+                    }
+                });
 
-                    followUp.addEventListener('click', () => {
-                        const wzTextarea = modal.querySelector('.new-comment-form wz-textarea');
-                        if (wzTextarea) {
-                            wzTextarea.setAttribute('value', secondMessage(extracted[0], extracted[1]));
-                            wzTextarea.dispatchEvent(new Event('input'));
-                        }
-                    });
+                return button;
+            };
 
-                    // Third Button
-                    const lastButton = document.createElement('wz-button');
-                    lastButton.setAttribute('type', 'button');
-                    lastButton.setAttribute('style', 'margin-bottom: 5px');
-                    lastButton.setAttribute('disabled', 'false');
-                    lastButton.classList.add('send-button', 'ez-comment-button');
-                    lastButton.textContent = 'Final Follow UP';
-                    commentList.parentNode.insertBefore(lastButton, newCommentForm);
+            // First Button
+            const initialButton = createButton('Initial', firstMessage);
+            commentList.parentNode.insertBefore(initialButton, newCommentForm);
 
-                    lastButton.addEventListener('click', () => {
-                        const wzTextarea = modal.querySelector('.new-comment-form wz-textarea');
-                        if (wzTextarea) {
-                            wzTextarea.setAttribute('value', thirdMessage(extracted[0], extracted[1]));
-                            wzTextarea.dispatchEvent(new Event('input'));
-                        }
-                    });
+            // Second Button
+            const followUpButton = createButton('Follow Up', secondMessage);
+            commentList.parentNode.insertBefore(followUpButton, newCommentForm);
 
-                    // Close Button
-                    const closeButton = document.createElement('wz-button');
-                    closeButton.setAttribute('type', 'button');
-                    closeButton.setAttribute('style', 'margin-bottom: 30px');
-                    closeButton.setAttribute('disabled', 'false');
-                    closeButton.classList.add('send-button', 'ez-comment-button');
-                    closeButton.textContent = 'No Reply';
-                    commentList.parentNode.insertBefore(closeButton, newCommentForm);
+            // Third Button
+            const finalButton = createButton('Final Follow Up', thirdMessage);
+            commentList.parentNode.insertBefore(finalButton, newCommentForm);
 
-                    closeButton.addEventListener('click', () => {
-                        const wzTextarea = modal.querySelector('.new-comment-form wz-textarea');
-                        if (wzTextarea) {
-                            wzTextarea.setAttribute('value', closeMessage(extracted[0], extracted[1]));
-                            wzTextarea.dispatchEvent(new Event('input'));
-                        }
-                    });
-                }
-            } else {
-                console.log('commentList or newCommentForm not found yet.');
-            }
-        }, 1000);
+            // Close Button
+            const closeButton = createButton('No Reply', closeMessage, '30px');
+            commentList.parentNode.insertBefore(closeButton, newCommentForm);
 
+            console.log('Successfully inserted all buttons');
+        } catch (error) {
+            console.error('Error inserting buttons:', error);
+        }
     }
 
-    // Create a mutation observer to detect DOM changes
-    const observer = new MutationObserver(() => {
-        checkModal();
-    });
+    // Direct panel detection that also watches for content changes
+    function setupDirectPanelDetection() {
+        console.log('Setting up panel detection for mapUpdateRequest panels');
 
-    // Start observing the body for changes
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+        // First observer - watch for panel additions to the DOM
+        const panelObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                for (let i = 0; i < mutation.addedNodes.length; i++) {
+                    const addedNode = mutation.addedNodes[i];
 
+                    if (addedNode.nodeType === Node.ELEMENT_NODE) {
+                        // Check if this is the mapUpdateRequest element or contains it
+                        // Updated to check ONLY for the mapUpdateRequest class
+                        const mapRequestPanel = addedNode.classList &&
+                            addedNode.classList.contains('mapUpdateRequest') ?
+                            addedNode :
+                            addedNode.querySelector('.mapUpdateRequest');
 
+                        if (mapRequestPanel) {
+                            console.log('mapUpdateRequest panel found in DOM changes');
+                            checkModal(); // Use checkModal to handle all the logic
+                        }
+                    }
+                }
+            });
+        });
+
+        // Second observer - watch for content changes inside an already open panel
+        const contentObserver = new MutationObserver(() => {
+            const modal = document.querySelector('.mapUpdateRequest');
+            if (modal) {
+                const newIssueId = getIssueIdentifier(modal);
+
+                // If the issue ID changed, we have a new request in the panel
+                if (newIssueId !== currentIssueId) {
+                    console.log('Issue content changed in panel:', newIssueId);
+                    currentIssueId = newIssueId;
+                    insertButton(modal);
+                }
+            }
+        });
+
+        // Observe the entire document for panel additions
+        panelObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Set up a timer to regularly check for the panel and also watch for content changes
+        const checkAndObserveContent = () => {
+            const modal = document.querySelector('.mapUpdateRequest');
+
+            // Always do the basic check
+            checkModal();
+
+            // If panel exists, make sure we're observing its content for changes
+            if (modal) {
+                // Disconnect and reconnect to ensure we're watching the current panel
+                contentObserver.disconnect();
+                contentObserver.observe(modal, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true
+                });
+            }
+        };
+
+        // Run the check/observe cycle every second
+        setInterval(checkAndObserveContent, 1000);
+
+        // Initial check
+        checkAndObserveContent();
+    }
+
+    // Set up script when the page is ready
+    if (document.readyState === 'complete') {
+        setupDirectPanelDetection();
+    } else {
+        window.addEventListener('load', setupDirectPanelDetection);
+    }
 })();
