@@ -26,7 +26,7 @@
         "Sep": "September",
         "Oct": "October",
         "Nov": "November",
-        "Dev": "December"
+        "Dec": "December"
     }
 
     function firstMessage(type, date) {
