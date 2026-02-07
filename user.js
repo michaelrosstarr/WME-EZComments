@@ -140,14 +140,14 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
             // Check if first part is a day of week
             if (dayOfWeekPattern.test(dateParts[0]) && dateParts.length >= 4) {
                 // Format: "Mon Jan 15 2026" or "Mon, Jan 15, 2026"
-                shortMonth = dateParts[1];
-                day = dateParts[2];
-                year = dateParts[3];
+                shortMonth = dateParts[1] || '';
+                day = dateParts[2] || '';
+                year = dateParts[3] || '';
             } else if (!dayOfWeekPattern.test(dateParts[0]) && dateParts.length >= 3) {
                 // Format: "Jan 15 2026" or "Jan 15, 2026"
-                shortMonth = dateParts[0];
-                day = dateParts[1];
-                year = dateParts[2];
+                shortMonth = dateParts[0] || '';
+                day = dateParts[1] || '';
+                year = dateParts[2] || '';
             }
         }
 
@@ -165,7 +165,12 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         }
 
         result = result.replace(/{TYPE}/g, type);
-        result = result.replace(/{FULLDATE}/g, `${monthNames[shortMonth] || shortMonth} ${day}, ${year}`);
+        // Only replace FULLDATE if we have all required components
+        if (shortMonth && day && year) {
+            result = result.replace(/{FULLDATE}/g, `${monthNames[shortMonth] || shortMonth} ${day}, ${year}`);
+        } else {
+            result = result.replace(/{FULLDATE}/g, dateStr);
+        }
         result = result.replace(/{MONTH}/g, monthNames[shortMonth] || '');
         result = result.replace(/{SHORTMONTH}/g, shortMonth || '');
         result = result.replace(/{DAY}/g, day || '');
@@ -223,7 +228,7 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
             // "Submitted on: Mon Jan 15 2026" (day of week, month, day, year)
             // "Submitted on: Jan 15, 2026" (month, day with comma, year)
             // "Submitted on: Mon, Jan 15, 2026" (day of week with comma, month, day with comma, year)
-            const dateRegex = /Submitted on: (.+)/;
+            const dateRegex = /Submitted on: ([^\n]+)/;
             const match = reportedText.match(dateRegex);
 
             if (match && match[1]) {
