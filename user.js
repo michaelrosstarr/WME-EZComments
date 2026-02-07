@@ -138,12 +138,12 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         
         if (dateParts.length >= 3) {
             // Check if first part is a day of week
-            if (dayOfWeekPattern.test(dateParts[0])) {
+            if (dayOfWeekPattern.test(dateParts[0]) && dateParts.length >= 4) {
                 // Format: "Mon Jan 15 2026" or "Mon, Jan 15, 2026"
                 shortMonth = dateParts[1];
                 day = dateParts[2];
                 year = dateParts[3];
-            } else {
+            } else if (!dayOfWeekPattern.test(dateParts[0]) && dateParts.length >= 3) {
                 // Format: "Jan 15 2026" or "Jan 15, 2026"
                 shortMonth = dateParts[0];
                 day = dateParts[1];
