@@ -124,7 +124,7 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         
         // Remove commas for easier parsing
         const cleanDateStr = dateStr.replace(/,/g, '');
-        const dateParts = cleanDateStr.split(' ').filter(part => part.trim());
+        const dateParts = cleanDateStr.split(' ').filter(part => part.trim() !== '');
         
         // Determine the format based on parts count and content
         let shortMonth = '';
@@ -166,9 +166,13 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
 
         result = result.replace(/{TYPE}/g, type);
         // Only replace FULLDATE if we have all required components
-        if (shortMonth && day && year) {
-            result = result.replace(/{FULLDATE}/g, `${monthNames[shortMonth] || shortMonth} ${day}, ${year}`);
+        if (shortMonth && day && year && monthNames[shortMonth]) {
+            result = result.replace(/{FULLDATE}/g, `${monthNames[shortMonth]} ${day}, ${year}`);
+        } else if (shortMonth && day && year) {
+            // Month abbreviation not in monthNames, use as-is
+            result = result.replace(/{FULLDATE}/g, `${shortMonth} ${day}, ${year}`);
         } else {
+            // Date parsing failed, use raw date string
             result = result.replace(/{FULLDATE}/g, dateStr);
         }
         result = result.replace(/{MONTH}/g, monthNames[shortMonth] || '');
