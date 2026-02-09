@@ -16,7 +16,7 @@
     'use strict';
 
     const SCRIPT_NAME = 'WME EZ Comments';
-    const SCRIPT_VERSION = '2.1.1';
+    const SCRIPT_VERSION = '2.1.2';
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
     const STORAGE_KEY = 'wme_ez_comments_templates';
     const CUSTOM_USERNAME_KEY = 'wme_ez_comments_custom_username';
@@ -114,28 +114,31 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
 
     // Replace placeholders in template
     function replacePlaceholders(template, type, dateStr) {
+
+
+
         let result = template;
-        
+
         // Parse the date string to extract components
         // Handle formats like:
         // "Mon Jan 15 2026" (day of week, month, day, year)
         // "Jan 15, 2026" (month, day with comma, year)
         // "Mon, Jan 15, 2026" (day of week with comma, month, day with comma, year)
-        
+
         // Remove commas for easier parsing
         const cleanDateStr = dateStr.replace(/,/g, '');
         const dateParts = cleanDateStr.split(' ').filter(part => part.trim() !== '');
-        
+
         // Determine the format based on parts count and content
         let shortMonth = '';
         let day = '';
         let year = '';
-        
+
         // Check if first part is a day of week (3 letters) or month (3 letters)
         // Day of week: Mon, Tue, Wed, Thu, Fri, Sat, Sun
         // Month: Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
         const dayOfWeekPattern = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/;
-        
+
         if (dateParts.length >= 3) {
             // Check if first part is a day of week
             if (dayOfWeekPattern.test(dateParts[0]) && dateParts.length >= 4) {
@@ -223,24 +226,43 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         const subTitleElement = document.querySelector('.issue-panel-header .sub-title');
         const subTitle = subTitleElement ? subTitleElement.textContent.trim() : 'No sub-title found';
 
-        const reportedDateElement = document.querySelector('.issue-panel-header .reported');
+        // Try multiple selectors to find the date
+        let reportedDateElement = document.querySelector('.issue-panel-header .reported');
+        if (!reportedDateElement) {
+            reportedDateElement = document.querySelector('.mapUpdateRequest .reported');
+        }
+        if (!reportedDateElement) {
+            reportedDateElement = document.querySelector('[class*="reported"]');
+        }
+
         let reportedDate = '';
 
         if (reportedDateElement) {
             const reportedText = reportedDateElement.textContent.trim();
-            // Match various date formats:
-            // "Submitted on: Mon Jan 15 2026" (day of week, month, day, year)
-            // "Submitted on: Jan 15, 2026" (month, day with comma, year)
-            // "Submitted on: Mon, Jan 15, 2026" (day of week with comma, month, day with comma, year)
-            const dateRegex = /Submitted on: ([^\n]+)/;
-            const match = reportedText.match(dateRegex);
+            console.log('WME EZ Comments - Found reported element text:', reportedText);
 
-            if (match && match[1]) {
-                reportedDate = match[1];
+            // Extract date and strip time if present
+            // Format: "Submitted on: Thu Dec 04 2025, 18:55"
+            const dateMatch = reportedText.match(/Submitted on[:\s]+(.+)/i) ||
+                reportedText.match(/Reported on[:\s]+(.+)/i);
+
+            if (dateMatch && dateMatch[1]) {
+                // Remove time portion (anything after comma followed by time like ", 18:55")
+                reportedDate = dateMatch[1].replace(/,\s*\d{2}:\d{2}.*$/, '').trim();
+                console.log('WME EZ Comments - Extracted date (time stripped):', reportedDate);
             } else {
-                reportedDate = 'No valid date found';
+                // Try to extract just the date portion directly
+                const directDateMatch = reportedText.match(/(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{4})/);
+                if (directDateMatch) {
+                    reportedDate = directDateMatch[1];
+                    console.log('WME EZ Comments - Extracted date (direct match):', reportedDate);
+                } else {
+                    console.log('WME EZ Comments - No date pattern matched, using raw text');
+                    reportedDate = reportedText;
+                }
             }
         } else {
+            console.log('WME EZ Comments - No reported date element found');
             reportedDate = 'No reported date found';
         }
 
