@@ -16,7 +16,7 @@
     'use strict';
 
     const SCRIPT_NAME = 'WME EZ Comments';
-    const SCRIPT_VERSION = '2.1.2';
+    const SCRIPT_VERSION = '2.1.3';
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
     const STORAGE_KEY = 'wme_ez_comments_templates';
     const CUSTOM_USERNAME_KEY = 'wme_ez_comments_custom_username';
