@@ -62,6 +62,8 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         '{SHORTMONTH}': 'Short month (Jan, Feb, etc.)',
         '{DAY}': 'Day of month',
         '{YEAR}': 'Year',
+        '{WEEKDAY}': 'Full weekday name (Monday, Tuesday, etc.)',
+        '{SHORTWEEKDAY}': 'Short weekday (Mon, Tue, etc.)',
         '{USERNAME}': 'Your Waze username',
         '{DATE}': 'Full date string'
     };
@@ -79,6 +81,16 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         "Oct": "October",
         "Nov": "November",
         "Dec": "December"
+    };
+
+    const weekdayNames = {
+        "Mon": "Monday",
+        "Tue": "Tuesday",
+        "Wed": "Wednesday",
+        "Thu": "Thursday",
+        "Fri": "Friday",
+        "Sat": "Saturday",
+        "Sun": "Sunday"
     };
 
     // Load templates from localStorage or use defaults
@@ -133,6 +145,7 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         let shortMonth = '';
         let day = '';
         let year = '';
+        let shortWeekday = '';
 
         // Check if first part is a day of week (3 letters) or month (3 letters)
         // Day of week: Mon, Tue, Wed, Thu, Fri, Sat, Sun
@@ -143,6 +156,7 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
             // Check if first part is a day of week
             if (dayOfWeekPattern.test(dateParts[0]) && dateParts.length >= 4) {
                 // Format: "Mon Jan 15 2026" or "Mon, Jan 15, 2026"
+                shortWeekday = dateParts[0] || '';
                 shortMonth = dateParts[1] || '';
                 day = dateParts[2] || '';
                 year = dateParts[3] || '';
@@ -182,6 +196,8 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
         result = result.replace(/{SHORTMONTH}/g, shortMonth || '');
         result = result.replace(/{DAY}/g, day || '');
         result = result.replace(/{YEAR}/g, year || '');
+        result = result.replace(/{WEEKDAY}/g, weekdayNames[shortWeekday] || '');
+        result = result.replace(/{SHORTWEEKDAY}/g, shortWeekday || '');
         result = result.replace(/{USERNAME}/g, username);
         result = result.replace(/{DATE}/g, dateStr);
 
@@ -410,6 +426,30 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                     <p style="color: #666; font-size: 12px; margin-top: 5px;">If set, this will be used instead of your Waze username for the {USERNAME} placeholder.</p>
                 </div>
 
+                <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
+                    <h4 style="margin-top: 0; margin-bottom: 10px;">Preview Templates</h4>
+                    <p style="color: #666; font-size: 12px; margin-bottom: 10px;">See how your templates will look with sample data</p>
+                    <button id="ezc-preview-btn" style="background: #ffc107; color: #000; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;">Generate Preview</button>
+                    <div id="ezc-preview-container" style="display: none;">
+                        <div style="margin-bottom: 15px;">
+                            <strong style="display: block; margin-bottom: 5px;">Initial Comment:</strong>
+                            <div id="ezc-preview-initial" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <strong style="display: block; margin-bottom: 5px;">Follow Up Comment:</strong>
+                            <div id="ezc-preview-followUp" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <strong style="display: block; margin-bottom: 5px;">Final Follow Up:</strong>
+                            <div id="ezc-preview-final" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
+                        </div>
+                        <div>
+                            <strong style="display: block; margin-bottom: 5px;">Close Comment:</strong>
+                            <div id="ezc-preview-close" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div style="margin-bottom: 25px;">
                     <label style="display: block; font-weight: bold; margin-bottom: 8px;">Initial Comment Template:</label>
                     <textarea id="ezc-template-initial" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
@@ -487,6 +527,50 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                         finalTextarea.value = templates.final;
                         closeTextarea.value = templates.close;
                         showStatus('Templates reset to defaults!', 'success');
+                    }
+                });
+            }
+
+            // Preview button handler
+            const previewBtn = document.getElementById('ezc-preview-btn');
+            if (previewBtn) {
+                previewBtn.addEventListener('click', () => {
+                    // Get current values from textareas
+                    const currentTemplates = {
+                        initial: initialTextarea.value,
+                        followUp: followUpTextarea.value,
+                        final: finalTextarea.value,
+                        close: closeTextarea.value
+                    };
+
+                    // Sample data for preview
+                    const sampleType = 'Map Issue';
+                    const sampleDate = 'Mon Feb 10 2026';
+
+                    // Generate previews
+                    const previewInitial = document.getElementById('ezc-preview-initial');
+                    const previewFollowUp = document.getElementById('ezc-preview-followUp');
+                    const previewFinal = document.getElementById('ezc-preview-final');
+                    const previewClose = document.getElementById('ezc-preview-close');
+                    const previewContainer = document.getElementById('ezc-preview-container');
+
+                    if (previewInitial && previewFollowUp && previewFinal && previewClose && previewContainer) {
+                        // Use the custom username from input if set
+                        const previewUsername = customUsernameInput.value.trim() || 'Waze Volunteer';
+
+                        // Temporarily set custom username for preview
+                        const originalUsername = customUsername;
+                        customUsername = previewUsername;
+
+                        previewInitial.textContent = replacePlaceholders(currentTemplates.initial, sampleType, sampleDate);
+                        previewFollowUp.textContent = replacePlaceholders(currentTemplates.followUp, sampleType, sampleDate);
+                        previewFinal.textContent = replacePlaceholders(currentTemplates.final, sampleType, sampleDate);
+                        previewClose.textContent = replacePlaceholders(currentTemplates.close, sampleType, sampleDate);
+
+                        // Restore original username
+                        customUsername = originalUsername;
+
+                        previewContainer.style.display = 'block';
                     }
                 });
             }
