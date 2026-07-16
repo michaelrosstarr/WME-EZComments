@@ -1,0 +1,29 @@
+user.js
+  s_7466258c6f16e2::t_1c3e5ed8ca313e 481-485
+  s_7466258c6f16e2::t_72a5e1b840b352 560-561
+  s_7466258c6f16e2::t_db1401461f022f 55-58
+  s_7466258c6f16e2::t_84f9ebc66f2c5a 450,454-456
+  s_7466258c6f16e2::t_454628417b2da0 573,576
+  s_7466258c6f16e2::t_9bc8103feef492 504,511,522-523
+  s_7466258c6f16e2::t_b5e99e518b5cf8 588
+  s_7466258c6f16e2::t_c2c035d3e69c70 4,19
+  s_7466258c6f16e2::t_2348a13b4385d8 328-329
+  s_7466258c6f16e2::t_f5ff3a57bfbb66 545
+  s_7466258c6f16e2::t_0dfc251ec219e6 457
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3799ca50d482271ce23afa48e5b54a0c9c4845a8",
+  "prompts": {},
+  "sessions": {
+    "s_7466258c6f16e2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "436eba9d-3dd0-46e5-ace6-49a92b33ce56",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Michael Ross Tarr <mrmrmtarr@gmail.com>"
+    }
+  }
+}
