@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.1.1
+// @version      2.2.0
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @match        https://www.waze.com/*/editor*
@@ -16,7 +16,7 @@
     'use strict';
 
     const SCRIPT_NAME = 'WME EZ Comments';
-    const SCRIPT_VERSION = '2.1.3';
+    const SCRIPT_VERSION = '2.2.0';
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
     const STORAGE_KEY = 'wme_ez_comments_templates';
     const CUSTOM_USERNAME_KEY = 'wme_ez_comments_custom_username';
@@ -52,7 +52,10 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
 *Open to any editor*`,
         close: `Hi, since we haven't heard back from you, we are going to close this issue. If you come across any other issues, please feel free to report it again via the Waze app.
 
-~ {USERNAME}`
+~ {USERNAME}`,
+        added: `Added. Please allow up to 72 hours for it to show/update in your Waze app.
+
+Regards, {USERNAME}`
     };
 
     const PLACEHOLDERS = {
@@ -322,7 +325,8 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
             commentList.parentNode.insertBefore(createButton('Initial', 'initial'), newCommentForm);
             commentList.parentNode.insertBefore(createButton('Follow Up', 'followUp'), newCommentForm);
             commentList.parentNode.insertBefore(createButton('Final Follow Up', 'final'), newCommentForm);
-            commentList.parentNode.insertBefore(createButton('No Reply', 'close', '30px'), newCommentForm);
+            commentList.parentNode.insertBefore(createButton('No Reply', 'close'), newCommentForm);
+            commentList.parentNode.insertBefore(createButton('Added', 'added', '30px'), newCommentForm);
 
         } catch (error) {
             console.error('Error inserting buttons:', error);
@@ -443,9 +447,13 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                             <strong style="display: block; margin-bottom: 5px;">Final Follow Up:</strong>
                             <div id="ezc-preview-final" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
                         </div>
-                        <div>
+                        <div style="margin-bottom: 15px;">
                             <strong style="display: block; margin-bottom: 5px;">Close Comment:</strong>
                             <div id="ezc-preview-close" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
+                        </div>
+                        <div>
+                            <strong style="display: block; margin-bottom: 5px;">Added Comment:</strong>
+                            <div id="ezc-preview-added" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
                         </div>
                     </div>
                 </div>
@@ -470,6 +478,11 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                     <textarea id="ezc-template-close" style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
                 </div>
 
+                <div style="margin-bottom: 25px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">Added Comment Template:</label>
+                    <textarea id="ezc-template-added" style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                </div>
+
                 <div style="display: flex; gap: 10px;">
                     <button id="ezc-save-btn" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Templates</button>
                     <button id="ezc-reset-btn" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Reset to Defaults</button>
@@ -488,12 +501,14 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
             const followUpTextarea = document.getElementById('ezc-template-followUp');
             const finalTextarea = document.getElementById('ezc-template-final');
             const closeTextarea = document.getElementById('ezc-template-close');
+            const addedTextarea = document.getElementById('ezc-template-added');
             const customUsernameInput = document.getElementById('ezc-custom-username');
 
             if (initialTextarea) initialTextarea.value = templates.initial;
             if (followUpTextarea) followUpTextarea.value = templates.followUp;
             if (finalTextarea) finalTextarea.value = templates.final;
             if (closeTextarea) closeTextarea.value = templates.close;
+            if (addedTextarea) addedTextarea.value = templates.added;
             if (customUsernameInput) customUsernameInput.value = customUsername;
 
             // Save button handler
@@ -504,7 +519,8 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                         initial: initialTextarea.value,
                         followUp: followUpTextarea.value,
                         final: finalTextarea.value,
-                        close: closeTextarea.value
+                        close: closeTextarea.value,
+                        added: addedTextarea.value
                     };
                     saveTemplates(templates);
 
@@ -526,6 +542,7 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                         followUpTextarea.value = templates.followUp;
                         finalTextarea.value = templates.final;
                         closeTextarea.value = templates.close;
+                        addedTextarea.value = templates.added;
                         showStatus('Templates reset to defaults!', 'success');
                     }
                 });
@@ -540,7 +557,8 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                         initial: initialTextarea.value,
                         followUp: followUpTextarea.value,
                         final: finalTextarea.value,
-                        close: closeTextarea.value
+                        close: closeTextarea.value,
+                        added: addedTextarea.value
                     };
 
                     // Sample data for preview
@@ -552,9 +570,10 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                     const previewFollowUp = document.getElementById('ezc-preview-followUp');
                     const previewFinal = document.getElementById('ezc-preview-final');
                     const previewClose = document.getElementById('ezc-preview-close');
+                    const previewAdded = document.getElementById('ezc-preview-added');
                     const previewContainer = document.getElementById('ezc-preview-container');
 
-                    if (previewInitial && previewFollowUp && previewFinal && previewClose && previewContainer) {
+                    if (previewInitial && previewFollowUp && previewFinal && previewClose && previewAdded && previewContainer) {
                         // Use the custom username from input if set
                         const previewUsername = customUsernameInput.value.trim() || 'Waze Volunteer';
 
@@ -566,6 +585,7 @@ If we don't hear from you soon, we will assume that this is no longer an issue a
                         previewFollowUp.textContent = replacePlaceholders(currentTemplates.followUp, sampleType, sampleDate);
                         previewFinal.textContent = replacePlaceholders(currentTemplates.final, sampleType, sampleDate);
                         previewClose.textContent = replacePlaceholders(currentTemplates.close, sampleType, sampleDate);
+                        previewAdded.textContent = replacePlaceholders(currentTemplates.added, sampleType, sampleDate);
 
                         // Restore original username
                         customUsername = originalUsername;
