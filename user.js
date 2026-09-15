@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.2.0
+// @version      2.4.0
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @match        https://www.waze.com/*/editor*
@@ -16,18 +16,24 @@
     'use strict';
 
     const SCRIPT_NAME = 'WME EZ Comments';
-    const SCRIPT_VERSION = '2.2.0';
+    const SCRIPT_VERSION = '2.4.0';
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
     const STORAGE_KEY = 'wme_ez_comments_templates';
     const CUSTOM_USERNAME_KEY = 'wme_ez_comments_custom_username';
+    const COMPACT_BUTTONS_KEY = 'wme_ez_comments_compact_buttons';
 
     let sdk = null;
     let modalOpen = false;
     let currentIssueId = null;
 
-    // Default comment templates with placeholders
-    const DEFAULT_TEMPLATES = {
-        initial: `Hi, Waze volunteers responding to your "{TYPE}" issue that you reported on {FULLDATE}.
+    // Default message types. Each entry becomes one button in the reply panel.
+    // Users can edit, reorder, delete, or add their own from the settings tab -
+    // the list below is only the starting point, not a fixed set of "types".
+    const DEFAULT_MESSAGE_TYPES = [
+        {
+            id: 'initial',
+            label: 'Initial',
+            text: `Hi, Waze volunteers responding to your "{TYPE}" issue that you reported on {FULLDATE}.
 
 Can you please give us some additional information? Waze gives us very little to work off of so it would be greatly appreciated if you could help us out.
 
@@ -35,28 +41,45 @@ Please reply using the Waze app and not emails, the report system does not work 
 
 ~ {USERNAME}
 
-*Open to any editor*`,
-        followUp: `Hi, we haven't heard back from you about the "{TYPE}" issue you reported on {FULLDATE}.
+*Open to any editor*`
+        },
+        {
+            id: 'followUp',
+            label: 'Follow Up',
+            text: `Hi, we haven't heard back from you about the "{TYPE}" issue you reported on {FULLDATE}.
 
 Please help us to make Waze better for all users. Please respond using the Waze app, emails don't work with the reporting system.
 
 ~ {USERNAME}
 
-*Open to any editor*`,
-        final: `Hi, we haven't heard back from you about your "{TYPE}" issue that you reported on {FULLDATE}.
+*Open to any editor*`
+        },
+        {
+            id: 'final',
+            label: 'Final Follow Up',
+            text: `Hi, we haven't heard back from you about your "{TYPE}" issue that you reported on {FULLDATE}.
 
 If we don't hear from you soon, we will assume that this is no longer an issue and close the report. Please reply using the Waze app and not emails, the report system does not work with replying to the email.
 
 ~ {USERNAME}
 
-*Open to any editor*`,
-        close: `Hi, since we haven't heard back from you, we are going to close this issue. If you come across any other issues, please feel free to report it again via the Waze app.
+*Open to any editor*`
+        },
+        {
+            id: 'close',
+            label: 'No Reply',
+            text: `Hi, since we haven't heard back from you, we are going to close this issue. If you come across any other issues, please feel free to report it again via the Waze app.
 
-~ {USERNAME}`,
-        added: `Added. Please allow up to 72 hours for it to show/update in your Waze app.
+~ {USERNAME}`
+        },
+        {
+            id: 'added',
+            label: 'Added',
+            text: `Added. Please allow up to 72 hours for it to show/update in your Waze app.
 
 Regards, {USERNAME}`
-    };
+        }
+    ];
 
     const PLACEHOLDERS = {
         '{TYPE}': 'Issue type/description',
@@ -96,22 +119,37 @@ Regards, {USERNAME}`
         "Sun": "Sunday"
     };
 
-    // Load templates from localStorage or use defaults
-    function loadTemplates() {
+    function generateTypeId() {
+        return 'custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+
+    // Load message types from localStorage or use defaults.
+    // Transparently migrates the old fixed-key object format ({initial: "...", ...})
+    // to the new array-of-types format so existing users keep their saved text.
+    function loadMessageTypes() {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             try {
-                return JSON.parse(stored);
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed)) {
+                    return parsed;
+                }
+                if (parsed && typeof parsed === 'object') {
+                    return DEFAULT_MESSAGE_TYPES.map(defaultType => ({
+                        ...defaultType,
+                        text: typeof parsed[defaultType.id] === 'string' ? parsed[defaultType.id] : defaultType.text
+                    }));
+                }
             } catch (e) {
-                console.error('Error loading templates:', e);
+                console.error('Error loading message types:', e);
             }
         }
-        return { ...DEFAULT_TEMPLATES };
+        return DEFAULT_MESSAGE_TYPES.map(type => ({ ...type }));
     }
 
-    // Save templates to localStorage
-    function saveTemplates(templates) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
+    // Save message types to localStorage
+    function saveMessageTypes(types) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(types));
     }
 
     // Load custom username from localStorage
@@ -124,8 +162,19 @@ Regards, {USERNAME}`
         localStorage.setItem(CUSTOM_USERNAME_KEY, username);
     }
 
-    let templates = loadTemplates();
+    // Load compact buttons preference from localStorage
+    function loadCompactButtons() {
+        return localStorage.getItem(COMPACT_BUTTONS_KEY) === 'true';
+    }
+
+    // Save compact buttons preference to localStorage
+    function saveCompactButtons(compact) {
+        localStorage.setItem(COMPACT_BUTTONS_KEY, compact ? 'true' : 'false');
+    }
+
+    let messageTypes = loadMessageTypes();
     let customUsername = loadCustomUsername();
+    let compactButtons = loadCompactButtons();
 
     // Replace placeholders in template
     function replacePlaceholders(template, type, dateStr) {
@@ -207,9 +256,9 @@ Regards, {USERNAME}`
         return result;
     }
 
-    function getCommentText(templateKey, type, date) {
-        const template = templates[templateKey] || DEFAULT_TEMPLATES[templateKey];
-        return replacePlaceholders(template, type, date);
+    function getCommentText(typeId, type, date) {
+        const messageType = messageTypes.find(t => t.id === typeId);
+        return replacePlaceholders(messageType ? messageType.text : '', type, date);
     }
 
     function checkModal() {
@@ -306,6 +355,7 @@ Regards, {USERNAME}`
             const createButton = (text, templateKey, marginBottom = '5px') => {
                 const button = document.createElement('wz-button');
                 button.setAttribute('type', 'button');
+                button.setAttribute('size', compactButtons ? 'sm' : 'md');
                 button.setAttribute('style', `margin-bottom: ${marginBottom}`);
                 button.setAttribute('disabled', 'false');
                 button.classList.add('send-button', 'ez-comment-button');
@@ -322,11 +372,12 @@ Regards, {USERNAME}`
                 return button;
             };
 
-            commentList.parentNode.insertBefore(createButton('Initial', 'initial'), newCommentForm);
-            commentList.parentNode.insertBefore(createButton('Follow Up', 'followUp'), newCommentForm);
-            commentList.parentNode.insertBefore(createButton('Final Follow Up', 'final'), newCommentForm);
-            commentList.parentNode.insertBefore(createButton('No Reply', 'close'), newCommentForm);
-            commentList.parentNode.insertBefore(createButton('Added', 'added', '30px'), newCommentForm);
+            const gap = compactButtons ? '3px' : '5px';
+            const lastGap = compactButtons ? '20px' : '30px';
+            messageTypes.forEach((messageType, index) => {
+                const marginBottom = index === messageTypes.length - 1 ? lastGap : gap;
+                commentList.parentNode.insertBefore(createButton(messageType.label, messageType.id, marginBottom), newCommentForm);
+            });
 
         } catch (error) {
             console.error('Error inserting buttons:', error);
@@ -398,6 +449,13 @@ Regards, {USERNAME}`
         checkAndObserveContent();
     }
 
+    // Escape text for safe interpolation into innerHTML-built markup
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str ?? '';
+        return div.innerHTML;
+    }
+
     // Create settings tab UI
     async function createSettingsTab() {
         // Register the tab using SDK - call without parameters
@@ -413,8 +471,8 @@ Regards, {USERNAME}`
         tabContent.innerHTML = `
             <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;">
                 <h3 style="margin-top: 0;">${SCRIPT_NAME} v${SCRIPT_VERSION}</h3>
-                <p style="color: #666; margin-bottom: 20px;">Customize your quick comment templates. Use placeholders to make templates dynamic.</p>
-                
+                <p style="color: #666; margin-bottom: 20px;">Customize your quick comment message types. Use placeholders to make templates dynamic.</p>
+
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                     <h4 style="margin-top: 0;">Available Placeholders:</h4>
                     <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; font-size: 12px;">
@@ -430,64 +488,35 @@ Regards, {USERNAME}`
                     <p style="color: #666; font-size: 12px; margin-top: 5px;">If set, this will be used instead of your Waze username for the {USERNAME} placeholder.</p>
                 </div>
 
+                <div style="margin-bottom: 25px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer;">
+                        <input type="checkbox" id="ezc-compact-buttons" style="width: 16px; height: 16px; cursor: pointer;" />
+                        Compact Buttons
+                    </label>
+                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Shrinks the message type buttons in the reply panel and tightens the spacing between them.</p>
+                </div>
+
                 <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
-                    <h4 style="margin-top: 0; margin-bottom: 10px;">Preview Templates</h4>
-                    <p style="color: #666; font-size: 12px; margin-bottom: 10px;">See how your templates will look with sample data</p>
+                    <h4 style="margin-top: 0; margin-bottom: 10px;">Preview Message Types</h4>
+                    <p style="color: #666; font-size: 12px; margin-bottom: 10px;">See how your message types will look with sample data</p>
                     <button id="ezc-preview-btn" style="background: #ffc107; color: #000; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;">Generate Preview</button>
-                    <div id="ezc-preview-container" style="display: none;">
-                        <div style="margin-bottom: 15px;">
-                            <strong style="display: block; margin-bottom: 5px;">Initial Comment:</strong>
-                            <div id="ezc-preview-initial" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
-                        </div>
-                        <div style="margin-bottom: 15px;">
-                            <strong style="display: block; margin-bottom: 5px;">Follow Up Comment:</strong>
-                            <div id="ezc-preview-followUp" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
-                        </div>
-                        <div style="margin-bottom: 15px;">
-                            <strong style="display: block; margin-bottom: 5px;">Final Follow Up:</strong>
-                            <div id="ezc-preview-final" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
-                        </div>
-                        <div style="margin-bottom: 15px;">
-                            <strong style="display: block; margin-bottom: 5px;">Close Comment:</strong>
-                            <div id="ezc-preview-close" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
-                        </div>
-                        <div>
-                            <strong style="display: block; margin-bottom: 5px;">Added Comment:</strong>
-                            <div id="ezc-preview-added" style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;"></div>
-                        </div>
+                    <div id="ezc-preview-container" style="display: none;"></div>
+                </div>
+
+                <div style="margin-bottom: 25px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-weight: bold;">Message Types (Buttons):</label>
+                        <button id="ezc-add-type-btn" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">+ Add Message Type</button>
                     </div>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">Initial Comment Template:</label>
-                    <textarea id="ezc-template-initial" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">Follow Up Comment Template:</label>
-                    <textarea id="ezc-template-followUp" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">Final Follow Up Template:</label>
-                    <textarea id="ezc-template-final" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">Close Comment Template:</label>
-                    <textarea id="ezc-template-close" style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">Added Comment Template:</label>
-                    <textarea id="ezc-template-added" style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                    <p style="color: #666; font-size: 12px; margin-bottom: 10px;">Each message type below adds its own button to the reply panel. Add as many as you like &mdash; for example a "Thanks for letting us know" type &mdash; with your own label, order, and message text.</p>
+                    <div id="ezc-type-list"></div>
                 </div>
 
                 <div style="display: flex; gap: 10px;">
-                    <button id="ezc-save-btn" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Templates</button>
+                    <button id="ezc-save-btn" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">Save All</button>
                     <button id="ezc-reset-btn" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Reset to Defaults</button>
                 </div>
-                
+
                 <div id="ezc-status" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
             </div>
         `;
@@ -495,109 +524,109 @@ Regards, {USERNAME}`
         // Append content to the tabPane
         tabPane.appendChild(tabContent);
 
-        // Load current templates into textareas after tab is created
-        setTimeout(() => {
-            const initialTextarea = document.getElementById('ezc-template-initial');
-            const followUpTextarea = document.getElementById('ezc-template-followUp');
-            const finalTextarea = document.getElementById('ezc-template-final');
-            const closeTextarea = document.getElementById('ezc-template-close');
-            const addedTextarea = document.getElementById('ezc-template-added');
-            const customUsernameInput = document.getElementById('ezc-custom-username');
+        // Working copy of message types edited in this tab. Nothing is persisted
+        // until "Save All" is clicked.
+        let draftTypes = messageTypes.map(t => ({ ...t }));
 
-            if (initialTextarea) initialTextarea.value = templates.initial;
-            if (followUpTextarea) followUpTextarea.value = templates.followUp;
-            if (finalTextarea) finalTextarea.value = templates.final;
-            if (closeTextarea) closeTextarea.value = templates.close;
-            if (addedTextarea) addedTextarea.value = templates.added;
-            if (customUsernameInput) customUsernameInput.value = customUsername;
+        const typeListEl = tabContent.querySelector('#ezc-type-list');
 
-            // Save button handler
-            const saveBtn = document.getElementById('ezc-save-btn');
-            if (saveBtn) {
-                saveBtn.addEventListener('click', () => {
-                    templates = {
-                        initial: initialTextarea.value,
-                        followUp: followUpTextarea.value,
-                        final: finalTextarea.value,
-                        close: closeTextarea.value,
-                        added: addedTextarea.value
-                    };
-                    saveTemplates(templates);
+        function renderTypeList() {
+            typeListEl.innerHTML = draftTypes.map((mt, index) => `
+                <div class="ezc-type-row" data-index="${index}" style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 12px; background: #fafafa;">
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                        <input type="text" class="ezc-type-label" value="${escapeHtml(mt.label)}" placeholder="Button label" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-weight: bold;" />
+                        <button class="ezc-move-up" title="Move up" ${index === 0 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer;">&uarr;</button>
+                        <button class="ezc-move-down" title="Move down" ${index === draftTypes.length - 1 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer;">&darr;</button>
+                        <button class="ezc-delete-type" title="Delete this message type" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">&times;</button>
+                    </div>
+                    <textarea class="ezc-type-text" placeholder="Message text" style="width: 100%; height: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;">${escapeHtml(mt.text)}</textarea>
+                </div>
+            `).join('');
 
-                    customUsername = customUsernameInput.value.trim();
-                    saveCustomUsername(customUsername);
+            typeListEl.querySelectorAll('.ezc-type-row').forEach(row => {
+                const index = Number(row.dataset.index);
 
-                    showStatus('Templates and settings saved successfully!', 'success');
+                row.querySelector('.ezc-type-label').addEventListener('input', (e) => {
+                    draftTypes[index].label = e.target.value;
                 });
-            }
-
-            // Reset button handler
-            const resetBtn = document.getElementById('ezc-reset-btn');
-            if (resetBtn) {
-                resetBtn.addEventListener('click', () => {
-                    if (confirm('Are you sure you want to reset all templates to defaults?')) {
-                        templates = { ...DEFAULT_TEMPLATES };
-                        saveTemplates(templates);
-                        initialTextarea.value = templates.initial;
-                        followUpTextarea.value = templates.followUp;
-                        finalTextarea.value = templates.final;
-                        closeTextarea.value = templates.close;
-                        addedTextarea.value = templates.added;
-                        showStatus('Templates reset to defaults!', 'success');
-                    }
+                row.querySelector('.ezc-type-text').addEventListener('input', (e) => {
+                    draftTypes[index].text = e.target.value;
                 });
-            }
-
-            // Preview button handler
-            const previewBtn = document.getElementById('ezc-preview-btn');
-            if (previewBtn) {
-                previewBtn.addEventListener('click', () => {
-                    // Get current values from textareas
-                    const currentTemplates = {
-                        initial: initialTextarea.value,
-                        followUp: followUpTextarea.value,
-                        final: finalTextarea.value,
-                        close: closeTextarea.value,
-                        added: addedTextarea.value
-                    };
-
-                    // Sample data for preview
-                    const sampleType = 'Map Issue';
-                    const sampleDate = 'Mon Feb 10 2026';
-
-                    // Generate previews
-                    const previewInitial = document.getElementById('ezc-preview-initial');
-                    const previewFollowUp = document.getElementById('ezc-preview-followUp');
-                    const previewFinal = document.getElementById('ezc-preview-final');
-                    const previewClose = document.getElementById('ezc-preview-close');
-                    const previewAdded = document.getElementById('ezc-preview-added');
-                    const previewContainer = document.getElementById('ezc-preview-container');
-
-                    if (previewInitial && previewFollowUp && previewFinal && previewClose && previewAdded && previewContainer) {
-                        // Use the custom username from input if set
-                        const previewUsername = customUsernameInput.value.trim() || 'Waze Volunteer';
-
-                        // Temporarily set custom username for preview
-                        const originalUsername = customUsername;
-                        customUsername = previewUsername;
-
-                        previewInitial.textContent = replacePlaceholders(currentTemplates.initial, sampleType, sampleDate);
-                        previewFollowUp.textContent = replacePlaceholders(currentTemplates.followUp, sampleType, sampleDate);
-                        previewFinal.textContent = replacePlaceholders(currentTemplates.final, sampleType, sampleDate);
-                        previewClose.textContent = replacePlaceholders(currentTemplates.close, sampleType, sampleDate);
-                        previewAdded.textContent = replacePlaceholders(currentTemplates.added, sampleType, sampleDate);
-
-                        // Restore original username
-                        customUsername = originalUsername;
-
-                        previewContainer.style.display = 'block';
-                    }
+                row.querySelector('.ezc-move-up').addEventListener('click', () => {
+                    if (index === 0) return;
+                    [draftTypes[index - 1], draftTypes[index]] = [draftTypes[index], draftTypes[index - 1]];
+                    renderTypeList();
                 });
+                row.querySelector('.ezc-move-down').addEventListener('click', () => {
+                    if (index === draftTypes.length - 1) return;
+                    [draftTypes[index + 1], draftTypes[index]] = [draftTypes[index], draftTypes[index + 1]];
+                    renderTypeList();
+                });
+                row.querySelector('.ezc-delete-type').addEventListener('click', () => {
+                    draftTypes.splice(index, 1);
+                    renderTypeList();
+                });
+            });
+        }
+
+        renderTypeList();
+
+        const customUsernameInput = tabContent.querySelector('#ezc-custom-username');
+        customUsernameInput.value = customUsername;
+
+        const compactButtonsInput = tabContent.querySelector('#ezc-compact-buttons');
+        compactButtonsInput.checked = compactButtons;
+
+        tabContent.querySelector('#ezc-add-type-btn').addEventListener('click', () => {
+            draftTypes.push({ id: generateTypeId(), label: 'New Message', text: '' });
+            renderTypeList();
+        });
+
+        tabContent.querySelector('#ezc-save-btn').addEventListener('click', () => {
+            messageTypes = draftTypes.map(t => ({ ...t }));
+            saveMessageTypes(messageTypes);
+
+            customUsername = customUsernameInput.value.trim();
+            saveCustomUsername(customUsername);
+
+            compactButtons = compactButtonsInput.checked;
+            saveCompactButtons(compactButtons);
+
+            showStatus('Message types and settings saved successfully!', 'success');
+        });
+
+        tabContent.querySelector('#ezc-reset-btn').addEventListener('click', () => {
+            if (confirm('Are you sure you want to reset all message types to defaults? This removes any custom message types you added.')) {
+                messageTypes = DEFAULT_MESSAGE_TYPES.map(t => ({ ...t }));
+                saveMessageTypes(messageTypes);
+                draftTypes = messageTypes.map(t => ({ ...t }));
+                renderTypeList();
+                showStatus('Message types reset to defaults!', 'success');
             }
-        }, 100);
+        });
+
+        tabContent.querySelector('#ezc-preview-btn').addEventListener('click', () => {
+            const sampleType = 'Map Issue';
+            const sampleDate = 'Mon Feb 10 2026';
+
+            // Temporarily use the in-progress username for the preview
+            const originalUsername = customUsername;
+            customUsername = customUsernameInput.value.trim() || 'Waze Volunteer';
+
+            const previewContainer = tabContent.querySelector('#ezc-preview-container');
+            previewContainer.innerHTML = draftTypes.map(mt => `
+                <div style="margin-bottom: 15px;">
+                    <strong style="display: block; margin-bottom: 5px;">${escapeHtml(mt.label)}:</strong>
+                    <div style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;">${escapeHtml(replacePlaceholders(mt.text, sampleType, sampleDate))}</div>
+                </div>
+            `).join('');
+            previewContainer.style.display = 'block';
+
+            customUsername = originalUsername;
+        });
 
         function showStatus(message, type) {
-            const statusDiv = document.getElementById('ezc-status');
+            const statusDiv = tabContent.querySelector('#ezc-status');
             if (!statusDiv) return;
 
             statusDiv.textContent = message;
