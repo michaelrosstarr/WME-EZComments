@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.9
+// @version      2.5.10
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
