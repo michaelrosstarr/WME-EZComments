@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.4
+// @version      2.5.5
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
@@ -57,49 +57,49 @@
             label: 'Initial',
             text: `Hi, Waze volunteers responding to your "{TYPE}" issue that you reported on {FULLDATE}.
 
-Can you please give us some additional information? Waze gives us very little to work off of so it would be greatly appreciated if you could help us out.
+                  Can you please give us some additional information? Waze gives us very little to work off of so it would be greatly appreciated if you could help us out.
 
-Please reply using the Waze app and not emails, the report system does not work with replying to the email.
+                  Please reply using the Waze app and not emails, the report system does not work with replying to the email.
 
-~ {USERNAME}
+                  ~ {USERNAME}
 
-*Open to any editor*`
+                  *Open to any editor*`
         },
         {
             id: 'followUp',
             label: 'Follow Up',
             text: `Hi, we haven't heard back from you about the "{TYPE}" issue you reported on {FULLDATE}.
 
-Please help us to make Waze better for all users. Please respond using the Waze app, emails don't work with the reporting system.
+                  Please help us to make Waze better for all users. Please respond using the Waze app, emails don't work with the reporting system.
 
-~ {USERNAME}
+                  ~ {USERNAME}
 
-*Open to any editor*`
+                  *Open to any editor*`
         },
         {
             id: 'final',
             label: 'Final Follow Up',
             text: `Hi, we haven't heard back from you about your "{TYPE}" issue that you reported on {FULLDATE}.
 
-If we don't hear from you soon, we will assume that this is no longer an issue and close the report. Please reply using the Waze app and not emails, the report system does not work with replying to the email.
+                  If we don't hear from you soon, we will assume that this is no longer an issue and close the report. Please reply using the Waze app and not emails, the report system does not work with replying to the email.
 
-~ {USERNAME}
+                  ~ {USERNAME}
 
-*Open to any editor*`
+                  *Open to any editor*`
         },
         {
             id: 'close',
             label: 'No Reply',
             text: `Hi, since we haven't heard back from you, we are going to close this issue. If you come across any other issues, please feel free to report it again via the Waze app.
 
-~ {USERNAME}`
+                  ~ {USERNAME}`
         },
         {
             id: 'added',
             label: 'Added',
             text: `Added. Please allow up to 72 hours for it to show/update in your Waze app.
 
-Regards, {USERNAME}`
+                Regards, {USERNAME}`
         }
     ];
 
