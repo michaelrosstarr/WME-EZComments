@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.6
+// @version      2.5.7
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
@@ -985,7 +985,6 @@
         }
     }
 
-    // Bootstrap script with SDK
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             if (pageWindow.SDK_INITIALIZED) {
