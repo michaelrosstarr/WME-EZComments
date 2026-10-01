@@ -1,9 +1,13 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.0
+// @version      2.5.3
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
+// @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
+// @supportURL   https://github.com/michaelrosstarr/WME-EZComments/issues
+// @updateURL    https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/user.js
+// @downloadURL  https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/user.js
 // @match        https://www.waze.com/*/editor*
 // @match        https://www.waze.com/editor*
 // @match        https://beta.waze.com/*/editor*
@@ -17,6 +21,7 @@
 // @grant        GM_setValue
 // @grant        unsafeWindow
 // @connect      sync.wazetools.com
+// @connect      raw.githubusercontent.com
 // @run-at       document-start
 // ==/UserScript==
 
@@ -24,8 +29,9 @@
     'use strict';
 
     const SCRIPT_NAME = 'WME EZ Comments';
-    const SCRIPT_VERSION = '2.5.0';
+    const SCRIPT_VERSION = '2.5.2';
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
+    const UPDATE_URL = 'https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/user.js';
     const STORAGE_KEY = 'wme_ez_comments_templates';
     const CUSTOM_USERNAME_KEY = 'wme_ez_comments_custom_username';
     const COMPACT_BUTTONS_KEY = 'wme_ez_comments_compact_buttons';
@@ -36,6 +42,7 @@
     // page globals like the WME SDK bootstrap have to be read from unsafeWindow.
     const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 
+    // Variables
     let sdk = null;
     let modalOpen = false;
     let currentIssueId = null;
@@ -557,6 +564,35 @@ Regards, {USERNAME}`
     }
 
     // Create settings tab UI
+    // Returns a positive number if version a is newer than b
+    function compareVersions(a, b) {
+        const pa = a.split('.').map(Number);
+        const pb = b.split('.').map(Number);
+        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+            const diff = (pa[i] || 0) - (pb[i] || 0);
+            if (diff !== 0) return diff;
+        }
+        return 0;
+    }
+
+    // Fetch the published script from GitHub and read its @version
+    function fetchLatestVersion() {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `${UPDATE_URL}?t=${Date.now()}`,
+                headers: { 'Cache-Control': 'no-cache' },
+                onload: (res) => {
+                    const match = res.status === 200 && res.responseText.match(/^\/\/\s*@version\s+(\S+)/m);
+                    match ? resolve(match[1]) : reject(new Error(`Unexpected response (HTTP ${res.status})`));
+                },
+                onerror: () => reject(new Error('Network error')),
+                ontimeout: () => reject(new Error('Request timed out')),
+                timeout: 15000
+            });
+        });
+    }
+
     async function createSettingsTab() {
         // Register the tab using SDK - call without parameters
         const { tabLabel, tabPane } = await sdk.Sidebar.registerScriptTab();
@@ -569,8 +605,35 @@ Regards, {USERNAME}`
         const tabContent = document.createElement('div');
         tabContent.id = 'ezc-settings';
         tabContent.innerHTML = `
+            <style>
+                /* Neutralize WME's global button styles so labels sit centered */
+                #ezc-settings button {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                    height: auto;
+                    min-height: 0;
+                    min-width: 0;
+                    margin: 0;
+                    line-height: 1.2;
+                    font-family: inherit;
+                    text-transform: none;
+                    letter-spacing: normal;
+                    vertical-align: middle;
+                    cursor: pointer;
+                }
+                #ezc-settings button:disabled {
+                    opacity: 0.4;
+                    cursor: default;
+                }
+            </style>
             <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;">
                 <h3 style="margin-top: 0;">${SCRIPT_NAME} v${SCRIPT_VERSION}</h3>
+                <div style="margin-bottom: 15px;">
+                    <button id="ezc-update-btn" style="background: white; color: #0066cc; border: 1px solid #0066cc; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">Check for Update</button>
+                    <span id="ezc-update-status" style="margin-left: 8px; font-size: 12px; color: #666;"></span>
+                </div>
                 <p style="color: #666; margin-bottom: 20px;">Customize your quick comment message types. Use placeholders to make templates dynamic.</p>
 
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -630,9 +693,9 @@ Regards, {USERNAME}`
                     <div id="ezc-type-list"></div>
                 </div>
 
-                <div style="display: flex; gap: 10px;">
-                    <button id="ezc-save-btn" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">Save All</button>
-                    <button id="ezc-reset-btn" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Reset to Defaults</button>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button id="ezc-save-btn" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: bold;">Save All</button>
+                    <button id="ezc-reset-btn" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: bold;">Reset to Defaults</button>
                 </div>
 
                 <div id="ezc-status" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
@@ -653,8 +716,8 @@ Regards, {USERNAME}`
                 <div class="ezc-type-row" data-index="${index}" style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 12px; background: #fafafa;">
                     <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
                         <input type="text" class="ezc-type-label" value="${escapeHtml(mt.label)}" placeholder="Button label" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-weight: bold;" />
-                        <button class="ezc-move-up" title="Move up" ${index === 0 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer;">&uarr;</button>
-                        <button class="ezc-move-down" title="Move down" ${index === draftTypes.length - 1 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer;">&darr;</button>
+                        <button class="ezc-move-up" title="Move up" ${index === 0 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; color: #333; font-size: 14px;">&uarr;</button>
+                        <button class="ezc-move-down" title="Move down" ${index === draftTypes.length - 1 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; color: #333; font-size: 14px;">&darr;</button>
                         <button class="ezc-delete-type" title="Delete this message type" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">&times;</button>
                     </div>
                     <textarea class="ezc-type-text" placeholder="Message text" style="width: 100%; height: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;">${escapeHtml(mt.text)}</textarea>
@@ -816,6 +879,33 @@ Regards, {USERNAME}`
                 draftTypes = messageTypes.map(t => ({ ...t }));
                 renderTypeList();
                 await pushAndReport('Message types reset to defaults!');
+            }
+        });
+
+        const updateBtn = tabContent.querySelector('#ezc-update-btn');
+        const updateStatus = tabContent.querySelector('#ezc-update-status');
+        updateBtn.addEventListener('click', async () => {
+            updateBtn.disabled = true;
+            updateStatus.style.color = '#666';
+            updateStatus.textContent = 'Checking...';
+            try {
+                const latest = await fetchLatestVersion();
+                if (compareVersions(latest, SCRIPT_VERSION) > 0) {
+                    updateStatus.style.color = '#155724';
+                    updateStatus.textContent = `v${latest} is available.`;
+                    if (confirm(`${SCRIPT_NAME} v${latest} is available (you have v${SCRIPT_VERSION}).\n\nOpen the update page now? Reload WME after installing.`)) {
+                        window.open(UPDATE_URL, '_blank');
+                    }
+                } else {
+                    updateStatus.style.color = '#155724';
+                    updateStatus.textContent = `You're up to date (v${SCRIPT_VERSION}).`;
+                }
+            } catch (error) {
+                console.error(`${SCRIPT_NAME}: update check failed`, error);
+                updateStatus.style.color = '#721c24';
+                updateStatus.textContent = `Update check failed: ${error.message}`;
+            } finally {
+                updateBtn.disabled = false;
             }
         });
 

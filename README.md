@@ -16,9 +16,17 @@ Quick comment templates for Waze Map Editor with automatic placeholders.
 ## Installation
 
 1. Install a userscript manager like [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)
-2. Install the script from the `user.js` file
+2. [Click here to install the script](https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/user.js) — your userscript manager will prompt you to confirm
 3. Navigate to Waze Map Editor
 4. Look for the "WME EZ Comments" tab in the sidebar
+
+### Updates
+
+The script updates automatically through your userscript manager, which periodically checks GitHub for a newer version. You can also trigger a check manually from the manager's dashboard ("Check for updates").
+
+> **Already installed an older copy?** Versions before 2.5.1 don't include the update URL, so reinstall once using the link above. After that, updates are automatic.
+
+**Maintainers:** on every release pushed to `main`, bump **both** `@version` in the header and `SCRIPT_VERSION` in the code. Userscript managers only install an update when `@version` increases.
 
 ## Placeholders
 
@@ -89,6 +97,10 @@ Can you provide more details?
 ```
 
 ## Changelog
+
+### v2.5.1
+- Added auto-update from GitHub (`@updateURL` / `@downloadURL`)
+- Added a "Check for Update" button to the settings tab
 
 ### v2.5.0
 - Added optional cloud sync of settings via WME Sync
