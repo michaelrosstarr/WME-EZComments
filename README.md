@@ -26,7 +26,7 @@ The script updates automatically through your userscript manager, which periodic
 
 > **Already installed an older copy?** The script file was renamed to `wme-ez-comments.user.js` in v2.5.4, so copies older than that won't find updates. Remove the old copy from your userscript manager and reinstall once using the link above. After that, updates are automatic.
 
-**Maintainers:** on every release pushed to `main`, bump `@version` in the header (the script reads its version from there). Userscript managers only install an update when `@version` increases. GitHub caches the raw file for up to 5 minutes, so a new release may not show up immediately.
+**Maintainers:** on every release pushed to `main`, bump `@version` in the header (the script reads its version from there). Userscript managers only install an update when `@version` increases. The "Check for Update" button sees a new release immediately, but the userscript manager's own background check reads a GitHub address that is cached for up to 5 minutes.
 
 ## Placeholders
 

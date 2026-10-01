@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.8
+// @version      2.5.9
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
@@ -22,6 +22,7 @@
 // @grant        unsafeWindow
 // @connect      sync.wazetools.com
 // @connect      raw.githubusercontent.com
+// @connect      api.github.com
 // @run-at       document-start
 // ==/UserScript==
 
@@ -32,7 +33,8 @@
     // Read from the @version header so there's only one place to bump
     const SCRIPT_VERSION = GM_info.script.version;
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
-    const UPDATE_URL = 'https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/wme-ez-comments.user.js';
+    const GITHUB_REPO = 'michaelrosstarr/WME-EZComments';
+    const SCRIPT_FILE = 'wme-ez-comments.user.js';
     const STORAGE_KEY = 'wme_ez_comments_templates';
     const CUSTOM_USERNAME_KEY = 'wme_ez_comments_custom_username';
     const COMPACT_BUTTONS_KEY = 'wme_ez_comments_compact_buttons';
@@ -573,22 +575,33 @@
         return 0;
     }
 
-    // Fetch the published script from GitHub and read its @version
-    function fetchLatestVersion() {
+    function gmGet(url, headers = {}) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: `${UPDATE_URL}?t=${Date.now()}`,
-                headers: { 'Cache-Control': 'no-cache' },
-                onload: (res) => {
-                    const match = res.status === 200 && res.responseText.match(/^\/\/\s*@version\s+(\S+)/m);
-                    match ? resolve(match[1]) : reject(new Error(`Unexpected response (HTTP ${res.status})`));
-                },
+                url,
+                headers,
+                onload: (res) => res.status === 200
+                    ? resolve(res.responseText)
+                    : reject(new Error(`Unexpected response (HTTP ${res.status})`)),
                 onerror: () => reject(new Error('Network error')),
                 ontimeout: () => reject(new Error('Request timed out')),
                 timeout: 15000
             });
         });
+    }
+
+    // Find the latest published version. raw.githubusercontent.com/.../main/ is
+    // cached for up to 5 minutes (query strings don't bypass it), so resolve the
+    // current commit via the API and read the file pinned to that commit instead.
+    async function fetchLatestRelease() {
+        const sha = (await gmGet(`https://api.github.com/repos/${GITHUB_REPO}/commits/main`, {
+            Accept: 'application/vnd.github.sha'
+        })).trim();
+        const url = `https://raw.githubusercontent.com/${GITHUB_REPO}/${sha}/${SCRIPT_FILE}`;
+        const match = (await gmGet(url)).match(/^\/\/\s*@version\s+(\S+)/m);
+        if (!match) throw new Error('No @version found in published script');
+        return { version: match[1], url };
     }
 
     async function createSettingsTab() {
@@ -887,12 +900,12 @@
             updateStatus.style.color = '#666';
             updateStatus.textContent = 'Checking...';
             try {
-                const latest = await fetchLatestVersion();
+                const { version: latest, url } = await fetchLatestRelease();
                 if (compareVersions(latest, SCRIPT_VERSION) > 0) {
                     updateStatus.style.color = '#155724';
                     updateStatus.textContent = `v${latest} is available.`;
                     if (confirm(`${SCRIPT_NAME} v${latest} is available (you have v${SCRIPT_VERSION}).\n\nOpen the update page now? Reload WME after installing.`)) {
-                        window.open(UPDATE_URL, '_blank');
+                        window.open(url, '_blank');
                     }
                 } else {
                     updateStatus.style.color = '#155724';
