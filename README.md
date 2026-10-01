@@ -16,7 +16,7 @@ Quick comment templates for Waze Map Editor with automatic placeholders.
 ## Installation
 
 1. Install a userscript manager like [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)
-2. [Click here to install the script](https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/user.js) — your userscript manager will prompt you to confirm
+2. [Click here to install the script](https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/wme-ez-comments.user.js) — your userscript manager will prompt you to confirm
 3. Navigate to Waze Map Editor
 4. Look for the "WME EZ Comments" tab in the sidebar
 
@@ -24,7 +24,7 @@ Quick comment templates for Waze Map Editor with automatic placeholders.
 
 The script updates automatically through your userscript manager, which periodically checks GitHub for a newer version. You can also trigger a check manually from the manager's dashboard ("Check for updates").
 
-> **Already installed an older copy?** Versions before 2.5.1 don't include the update URL, so reinstall once using the link above. After that, updates are automatic.
+> **Already installed an older copy?** The script file was renamed to `wme-ez-comments.user.js` in v2.5.4, so copies older than that won't find updates. Remove the old copy from your userscript manager and reinstall once using the link above. After that, updates are automatic.
 
 **Maintainers:** on every release pushed to `main`, bump `@version` in the header (the script reads its version from there). Userscript managers only install an update when `@version` increases. GitHub caches the raw file for up to 5 minutes, so a new release may not show up immediately.
 
@@ -100,6 +100,7 @@ Can you provide more details?
 
 ### v2.5.4
 - Script version is now read from the `@version` header, fixing the update check reporting the wrong version
+- Renamed the script to `wme-ez-comments.user.js` so "Check for Update" opens your userscript manager's update screen (existing installs must reinstall once)
 
 ### v2.5.1
 - Added auto-update from GitHub (`@updateURL` / `@downloadURL`)
