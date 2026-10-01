@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.3
+// @version      2.5.4
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
@@ -29,7 +29,8 @@
     'use strict';
 
     const SCRIPT_NAME = 'WME EZ Comments';
-    const SCRIPT_VERSION = '2.5.2';
+    // Read from the @version header so there's only one place to bump
+    const SCRIPT_VERSION = GM_info.script.version;
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
     const UPDATE_URL = 'https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/user.js';
     const STORAGE_KEY = 'wme_ez_comments_templates';

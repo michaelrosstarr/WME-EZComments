@@ -26,7 +26,7 @@ The script updates automatically through your userscript manager, which periodic
 
 > **Already installed an older copy?** Versions before 2.5.1 don't include the update URL, so reinstall once using the link above. After that, updates are automatic.
 
-**Maintainers:** on every release pushed to `main`, bump **both** `@version` in the header and `SCRIPT_VERSION` in the code. Userscript managers only install an update when `@version` increases.
+**Maintainers:** on every release pushed to `main`, bump `@version` in the header (the script reads its version from there). Userscript managers only install an update when `@version` increases. GitHub caches the raw file for up to 5 minutes, so a new release may not show up immediately.
 
 ## Placeholders
 
@@ -97,6 +97,9 @@ Can you provide more details?
 ```
 
 ## Changelog
+
+### v2.5.4
+- Script version is now read from the `@version` header, fixing the update check reporting the wrong version
 
 ### v2.5.1
 - Added auto-update from GitHub (`@updateURL` / `@downloadURL`)
