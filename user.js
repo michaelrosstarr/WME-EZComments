@@ -228,10 +228,27 @@ Regards, {USERNAME}`
 
     // Sign in to WMESync (showing or asking for the PIN on first use) and pull
     // the remote settings. Remote wins on load; if nothing is stored yet, the
-    // local settings seed it.
-    async function startSync() {
+    // local settings seed it. With `pin`, that PIN is used instead of prompting
+    // for one (signing in to an existing WME Sync account from the settings tab).
+    async function startSync(pin) {
+        const options = { scriptId: SCRIPT_ID, sdk };
+        if (pin) {
+            let pinUsed = false;
+            options.promptForPin = (username) => {
+                if (pinUsed) {
+                    throw new Error(`That PIN didn't work for "${username}".`);
+                }
+                pinUsed = true;
+                return pin;
+            };
+        }
+
         try {
-            sync = await WMESync.init({ scriptId: SCRIPT_ID, sdk });
+            sync = await WMESync.init(options);
+            if (pin) {
+                // Drop any existing session so the entered PIN is the one used
+                await sync.signOut();
+            }
             const remote = await sync.get(SYNC_KEY);
             if (remote) {
                 applySettings(remote);
@@ -242,6 +259,14 @@ Regards, {USERNAME}`
             sync = null;
             throw error;
         }
+    }
+
+    // Sign this browser out of WMESync: revokes its token and forgets the PIN, so
+    // the next sign-in asks for a PIN again. Local settings are left as they are.
+    async function signOutSync() {
+        const client = sync ?? await WMESync.init({ scriptId: SCRIPT_ID, sdk });
+        sync = null;
+        await client.signOut();
     }
 
     // Push the current settings to the cloud. Last write wins.
@@ -576,8 +601,17 @@ Regards, {USERNAME}`
                         <input type="checkbox" id="ezc-sync-enabled" style="width: 16px; height: 16px; cursor: pointer;" />
                         Enable Cloud Sync
                     </label>
-                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Syncs your message types, custom username and compact setting across browsers via WME Sync. The first time, you'll be shown a PIN &mdash; write it down and enter it when enabling sync in other browsers.</p>
-                    <p style="font-size: 12px; margin-top: 5px;">Status: <span id="ezc-sync-status">Off</span></p>
+                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Syncs your message types, custom username and compact setting across browsers via WME Sync. The first time, you'll be shown a PIN for your Waze username &mdash; write it down and use it to sign in on other browsers.</p>
+                    <p style="font-size: 12px; margin-top: 5px;">Status: <span id="ezc-sync-status">Off</span>
+                        <button id="ezc-sync-logout-btn" title="Sign this browser out of WME Sync. You can sign in again with your PIN." style="margin-left: 8px; background: white; color: #dc3545; border: 1px solid #dc3545; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Sign out</button>
+                    </p>
+                    <div id="ezc-sync-login" style="margin-top: 10px;">
+                        <label style="display: block; font-size: 12px; margin-bottom: 5px;">Already synced in another browser? Enter the PIN for your Waze username to load your settings:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="password" id="ezc-sync-pin" inputmode="numeric" autocomplete="off" placeholder="WME Sync PIN" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;" />
+                            <button id="ezc-sync-login-btn" style="background: #0066cc; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;">Sign in &amp; Sync</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
@@ -668,34 +702,80 @@ Regards, {USERNAME}`
 
         refreshForm();
 
-        syncEnabledInput.checked = !!sync;
-        syncStatusEl.textContent = sync ? 'Synced' : (loadSyncEnabled() ? 'Error - using local settings' : 'Off');
+        const syncLoginEl = tabContent.querySelector('#ezc-sync-login');
+        const syncPinInput = tabContent.querySelector('#ezc-sync-pin');
+        const syncLoginBtn = tabContent.querySelector('#ezc-sync-login-btn');
+        const syncLogoutBtn = tabContent.querySelector('#ezc-sync-logout-btn');
 
-        syncEnabledInput.addEventListener('change', async () => {
+        function setSyncUi(status) {
+            syncEnabledInput.checked = !!sync;
+            syncLoginEl.style.display = sync ? 'none' : 'block';
+            syncLogoutBtn.style.display = sync ? 'inline-block' : 'none';
+            syncStatusEl.textContent = status;
+        }
+
+        setSyncUi(sync ? 'Synced' : (loadSyncEnabled() ? 'Error - using local settings' : 'Off'));
+
+        // Turn sync on, optionally with a PIN entered in the tab, and load the
+        // synced settings into the form.
+        async function enableSync(pin) {
+            syncEnabledInput.disabled = true;
+            syncLoginBtn.disabled = true;
+            syncStatusEl.textContent = 'Connecting...';
+            try {
+                await startSync(pin);
+                saveSyncEnabled(true);
+                refreshForm();
+                syncPinInput.value = '';
+                setSyncUi('Synced');
+                showStatus('Cloud sync enabled. Your synced settings have been loaded.', 'success');
+            } catch (error) {
+                console.error(`${SCRIPT_NAME}: Error enabling cloud sync:`, error);
+                saveSyncEnabled(false);
+                setSyncUi('Off');
+                showStatus(`Could not enable cloud sync: ${error.message}`, 'error');
+            } finally {
+                syncEnabledInput.disabled = false;
+                syncLoginBtn.disabled = false;
+            }
+        }
+
+        syncEnabledInput.addEventListener('change', () => {
             if (syncEnabledInput.checked) {
-                syncEnabledInput.disabled = true;
-                syncStatusEl.textContent = 'Connecting...';
-                try {
-                    await startSync();
-                    saveSyncEnabled(true);
-                    refreshForm();
-                    syncStatusEl.textContent = 'Synced';
-                    showStatus('Cloud sync enabled.', 'success');
-                } catch (error) {
-                    console.error(`${SCRIPT_NAME}: Error enabling cloud sync:`, error);
-                    syncEnabledInput.checked = false;
-                    saveSyncEnabled(false);
-                    syncStatusEl.textContent = 'Off';
-                    showStatus(`Could not enable cloud sync: ${error.message}`, 'error');
-                } finally {
-                    syncEnabledInput.disabled = false;
-                }
+                enableSync();
             } else {
                 // The token is kept, so re-enabling later skips the PIN prompt.
                 saveSyncEnabled(false);
                 sync = null;
-                syncStatusEl.textContent = 'Off';
+                setSyncUi('Off');
             }
+        });
+
+        syncLogoutBtn.addEventListener('click', async () => {
+            if (!confirm('Sign this browser out of WME Sync? Your settings stay saved here, and you can sign in again with your PIN.')) {
+                return;
+            }
+            syncLogoutBtn.disabled = true;
+            try {
+                await signOutSync();
+                showStatus('Signed out of cloud sync. Enter a PIN to sign in again.', 'success');
+            } catch (error) {
+                console.error(`${SCRIPT_NAME}: Error signing out of cloud sync:`, error);
+                showStatus(`Sign out failed: ${error.message}`, 'error');
+            } finally {
+                saveSyncEnabled(false);
+                setSyncUi('Off');
+                syncLogoutBtn.disabled = false;
+            }
+        });
+
+        syncLoginBtn.addEventListener('click', () => {
+            const pin = syncPinInput.value.trim();
+            if (!/^\d{6,12}$/.test(pin)) {
+                showStatus('Enter your WME Sync PIN (6-12 digits).', 'error');
+                return;
+            }
+            enableSync(pin);
         });
 
         // Push to the cloud after a local save; the local save has already succeeded.

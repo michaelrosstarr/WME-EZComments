@@ -61,8 +61,10 @@ Cloud sync is off by default. When you turn it on, your message types, custom us
 
 1. Open the **WME EZ Comments** tab and tick **Enable Cloud Sync**
 2. The first time, a PIN is shown. Write it down.
-3. In another browser, tick **Enable Cloud Sync** there and enter the same PIN when asked
+3. In another browser, type that PIN into the **WME Sync PIN** box and click **Sign in & Sync**. Your settings are loaded straight away. You can also tick **Enable Cloud Sync** and enter the PIN when asked.
 4. Click **Save All** after making changes to push them to the cloud
+
+Each Waze username has one PIN, and every browser signs in with that same PIN. To sign a browser out, for example after entering a mistyped PIN, click **Sign out** next to the sync status. This browser forgets its sign-in and PIN, but your settings stay saved locally. You can then enter your PIN again and click **Sign in & Sync**.
 
 Synced settings are loaded when WME starts and override the local copy. If the sync server can't be reached, the script keeps using your locally saved settings.
 
