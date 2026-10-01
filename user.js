@@ -1,14 +1,22 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.4.0
+// @version      2.5.0
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @match        https://www.waze.com/*/editor*
 // @match        https://www.waze.com/editor*
+// @match        https://beta.waze.com/*/editor*
+// @match        https://beta.waze.com/editor*
 // @exclude      https://www.waze.com/user/editor*
+// @exclude      https://beta.waze.com/user/editor*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=waze.com
-// @grant        none
+// @require      https://sync.wazetools.com/wme-sync-lib.js
+// @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        unsafeWindow
+// @connect      sync.wazetools.com
 // @run-at       document-start
 // ==/UserScript==
 
@@ -16,11 +24,17 @@
     'use strict';
 
     const SCRIPT_NAME = 'WME EZ Comments';
-    const SCRIPT_VERSION = '2.4.0';
+    const SCRIPT_VERSION = '2.5.0';
     const SCRIPT_ID = 'wme-ez-comments-bushmanza-edition';
     const STORAGE_KEY = 'wme_ez_comments_templates';
     const CUSTOM_USERNAME_KEY = 'wme_ez_comments_custom_username';
     const COMPACT_BUTTONS_KEY = 'wme_ez_comments_compact_buttons';
+    const SYNC_ENABLED_KEY = 'wme_ez_comments_sync_enabled';
+    const SYNC_KEY = 'settings';
+
+    // Granting GM_* APIs runs the script in the userscript manager's sandbox, so
+    // page globals like the WME SDK bootstrap have to be read from unsafeWindow.
+    const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 
     let sdk = null;
     let modalOpen = false;
@@ -172,9 +186,70 @@ Regards, {USERNAME}`
         localStorage.setItem(COMPACT_BUTTONS_KEY, compact ? 'true' : 'false');
     }
 
+    // Load cloud sync opt-in from localStorage. Kept per-browser, never synced.
+    function loadSyncEnabled() {
+        return localStorage.getItem(SYNC_ENABLED_KEY) === 'true';
+    }
+
+    // Save cloud sync opt-in to localStorage
+    function saveSyncEnabled(enabled) {
+        localStorage.setItem(SYNC_ENABLED_KEY, enabled ? 'true' : 'false');
+    }
+
     let messageTypes = loadMessageTypes();
     let customUsername = loadCustomUsername();
     let compactButtons = loadCompactButtons();
+
+    // WMESync client, set only while cloud sync is enabled and signed in
+    let sync = null;
+
+    function getSettingsSnapshot() {
+        return { messageTypes, customUsername, compactButtons };
+    }
+
+    // Apply settings pulled from the cloud and cache them in localStorage, which
+    // stays the offline fallback.
+    function applySettings(remote) {
+        if (!remote || typeof remote !== 'object') return;
+
+        if (Array.isArray(remote.messageTypes)) {
+            messageTypes = remote.messageTypes;
+            saveMessageTypes(messageTypes);
+        }
+        if (typeof remote.customUsername === 'string') {
+            customUsername = remote.customUsername;
+            saveCustomUsername(customUsername);
+        }
+        if (typeof remote.compactButtons === 'boolean') {
+            compactButtons = remote.compactButtons;
+            saveCompactButtons(compactButtons);
+        }
+    }
+
+    // Sign in to WMESync (showing or asking for the PIN on first use) and pull
+    // the remote settings. Remote wins on load; if nothing is stored yet, the
+    // local settings seed it.
+    async function startSync() {
+        try {
+            sync = await WMESync.init({ scriptId: SCRIPT_ID, sdk });
+            const remote = await sync.get(SYNC_KEY);
+            if (remote) {
+                applySettings(remote);
+            } else {
+                await sync.set(SYNC_KEY, getSettingsSnapshot());
+            }
+        } catch (error) {
+            sync = null;
+            throw error;
+        }
+    }
+
+    // Push the current settings to the cloud. Last write wins.
+    async function pushSettings() {
+        if (sync) {
+            await sync.set(SYNC_KEY, getSettingsSnapshot());
+        }
+    }
 
     // Replace placeholders in template
     function replacePlaceholders(template, type, dateStr) {
@@ -496,6 +571,15 @@ Regards, {USERNAME}`
                     <p style="color: #666; font-size: 12px; margin-top: 5px;">Shrinks the message type buttons in the reply panel and tightens the spacing between them.</p>
                 </div>
 
+                <div style="margin-bottom: 25px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer;">
+                        <input type="checkbox" id="ezc-sync-enabled" style="width: 16px; height: 16px; cursor: pointer;" />
+                        Enable Cloud Sync
+                    </label>
+                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Syncs your message types, custom username and compact setting across browsers via WME Sync. The first time, you'll be shown a PIN &mdash; write it down and enter it when enabling sync in other browsers.</p>
+                    <p style="font-size: 12px; margin-top: 5px;">Status: <span id="ezc-sync-status">Off</span></p>
+                </div>
+
                 <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
                     <h4 style="margin-top: 0; margin-bottom: 10px;">Preview Message Types</h4>
                     <p style="color: #666; font-size: 12px; margin-bottom: 10px;">See how your message types will look with sample data</p>
@@ -569,20 +653,70 @@ Regards, {USERNAME}`
             });
         }
 
-        renderTypeList();
-
         const customUsernameInput = tabContent.querySelector('#ezc-custom-username');
-        customUsernameInput.value = customUsername;
-
         const compactButtonsInput = tabContent.querySelector('#ezc-compact-buttons');
-        compactButtonsInput.checked = compactButtons;
+        const syncEnabledInput = tabContent.querySelector('#ezc-sync-enabled');
+        const syncStatusEl = tabContent.querySelector('#ezc-sync-status');
+
+        // Reset the form from the saved settings (e.g. after pulling from the cloud)
+        function refreshForm() {
+            draftTypes = messageTypes.map(t => ({ ...t }));
+            renderTypeList();
+            customUsernameInput.value = customUsername;
+            compactButtonsInput.checked = compactButtons;
+        }
+
+        refreshForm();
+
+        syncEnabledInput.checked = !!sync;
+        syncStatusEl.textContent = sync ? 'Synced' : (loadSyncEnabled() ? 'Error - using local settings' : 'Off');
+
+        syncEnabledInput.addEventListener('change', async () => {
+            if (syncEnabledInput.checked) {
+                syncEnabledInput.disabled = true;
+                syncStatusEl.textContent = 'Connecting...';
+                try {
+                    await startSync();
+                    saveSyncEnabled(true);
+                    refreshForm();
+                    syncStatusEl.textContent = 'Synced';
+                    showStatus('Cloud sync enabled.', 'success');
+                } catch (error) {
+                    console.error(`${SCRIPT_NAME}: Error enabling cloud sync:`, error);
+                    syncEnabledInput.checked = false;
+                    saveSyncEnabled(false);
+                    syncStatusEl.textContent = 'Off';
+                    showStatus(`Could not enable cloud sync: ${error.message}`, 'error');
+                } finally {
+                    syncEnabledInput.disabled = false;
+                }
+            } else {
+                // The token is kept, so re-enabling later skips the PIN prompt.
+                saveSyncEnabled(false);
+                sync = null;
+                syncStatusEl.textContent = 'Off';
+            }
+        });
+
+        // Push to the cloud after a local save; the local save has already succeeded.
+        async function pushAndReport(successMessage) {
+            try {
+                await pushSettings();
+                if (sync) syncStatusEl.textContent = 'Synced';
+                showStatus(successMessage, 'success');
+            } catch (error) {
+                console.error(`${SCRIPT_NAME}: Error pushing settings to cloud:`, error);
+                syncStatusEl.textContent = `Error: ${error.message}`;
+                showStatus(`Saved locally, but cloud sync failed: ${error.message}`, 'error');
+            }
+        }
 
         tabContent.querySelector('#ezc-add-type-btn').addEventListener('click', () => {
             draftTypes.push({ id: generateTypeId(), label: 'New Message', text: '' });
             renderTypeList();
         });
 
-        tabContent.querySelector('#ezc-save-btn').addEventListener('click', () => {
+        tabContent.querySelector('#ezc-save-btn').addEventListener('click', async () => {
             messageTypes = draftTypes.map(t => ({ ...t }));
             saveMessageTypes(messageTypes);
 
@@ -592,16 +726,16 @@ Regards, {USERNAME}`
             compactButtons = compactButtonsInput.checked;
             saveCompactButtons(compactButtons);
 
-            showStatus('Message types and settings saved successfully!', 'success');
+            await pushAndReport('Message types and settings saved successfully!');
         });
 
-        tabContent.querySelector('#ezc-reset-btn').addEventListener('click', () => {
+        tabContent.querySelector('#ezc-reset-btn').addEventListener('click', async () => {
             if (confirm('Are you sure you want to reset all message types to defaults? This removes any custom message types you added.')) {
                 messageTypes = DEFAULT_MESSAGE_TYPES.map(t => ({ ...t }));
                 saveMessageTypes(messageTypes);
                 draftTypes = messageTypes.map(t => ({ ...t }));
                 renderTypeList();
-                showStatus('Message types reset to defaults!', 'success');
+                await pushAndReport('Message types reset to defaults!');
             }
         });
 
@@ -647,7 +781,7 @@ Regards, {USERNAME}`
 
         try {
             // Get the SDK instance
-            sdk = getWmeSdk({
+            sdk = pageWindow.getWmeSdk({
                 scriptId: SCRIPT_ID,
                 scriptName: SCRIPT_NAME
             });
@@ -657,6 +791,16 @@ Regards, {USERNAME}`
             // Wait for WME to be ready
             await sdk.Events.once({ eventName: 'wme-ready' });
             console.log(`${SCRIPT_NAME}: WME ready`);
+
+            // Pull synced settings before building the UI so the tab and buttons use them
+            if (loadSyncEnabled()) {
+                try {
+                    await startSync();
+                    console.log(`${SCRIPT_NAME}: Cloud sync loaded`);
+                } catch (error) {
+                    console.error(`${SCRIPT_NAME}: Cloud sync failed, using local settings:`, error);
+                }
+            }
 
             // Create settings tab
             await createSettingsTab();
@@ -673,15 +817,15 @@ Regards, {USERNAME}`
     // Bootstrap script with SDK
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-            if (window.SDK_INITIALIZED) {
-                window.SDK_INITIALIZED.then(init);
+            if (pageWindow.SDK_INITIALIZED) {
+                pageWindow.SDK_INITIALIZED.then(init);
             } else {
                 console.error(`${SCRIPT_NAME}: SDK not available`);
             }
         });
     } else {
-        if (window.SDK_INITIALIZED) {
-            window.SDK_INITIALIZED.then(init);
+        if (pageWindow.SDK_INITIALIZED) {
+            pageWindow.SDK_INITIALIZED.then(init);
         } else {
             console.error(`${SCRIPT_NAME}: SDK not available`);
         }

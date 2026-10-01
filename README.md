@@ -11,6 +11,7 @@ Quick comment templates for Waze Map Editor with automatic placeholders.
 - Settings saved automatically
 - One-click comment buttons
 - Custom username option
+- Optional cloud sync of your settings across browsers
 
 ## Installation
 
@@ -54,6 +55,17 @@ Add these to your templates and they'll auto-fill:
 3. Review the auto-filled comment
 4. Send!
 
+## Cloud Sync
+
+Cloud sync is off by default. When you turn it on, your message types, custom username and compact button setting are kept in sync across browsers and machines through [WME Sync](https://sync.wazetools.com).
+
+1. Open the **WME EZ Comments** tab and tick **Enable Cloud Sync**
+2. The first time, a PIN is shown. Write it down.
+3. In another browser, tick **Enable Cloud Sync** there and enter the same PIN when asked
+4. Click **Save All** after making changes to push them to the cloud
+
+Synced settings are loaded when WME starts and override the local copy. If the sync server can't be reached, the script keeps using your locally saved settings.
+
 ## Example
 
 **Template:**
@@ -75,6 +87,10 @@ Can you provide more details?
 ```
 
 ## Changelog
+
+### v2.5.0
+- Added optional cloud sync of settings via WME Sync
+- Added support for the WME beta editor
 
 ### v2.1.1 (2026-02-06)
 - Added custom username field in settings
