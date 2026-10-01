@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.7
+// @version      2.5.8
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
@@ -48,9 +48,6 @@
     let modalOpen = false;
     let currentIssueId = null;
 
-    // Default message types. Each entry becomes one button in the reply panel.
-    // Users can edit, reorder, delete, or add their own from the settings tab -
-    // the list below is only the starting point, not a fixed set of "types".
     const DEFAULT_MESSAGE_TYPES = [
         {
             id: 'initial',
