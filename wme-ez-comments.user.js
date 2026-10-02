@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.10
+// @version      2.5.11
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
@@ -325,6 +325,11 @@
                 day = dateParts[1] || '';
                 year = dateParts[2] || '';
             }
+
+            // Day-before-month format: "Sat 12 Sep 2026" or "12 Sep 2026"
+            if (!monthNames[shortMonth] && monthNames[day]) {
+                [shortMonth, day] = [day, shortMonth];
+            }
         }
 
         // Get username - use custom username if set, otherwise get from SDK
@@ -398,13 +403,18 @@
     }
 
     function extractIssueDetails() {
-        const subTitleElement = document.querySelector('.issue-panel-header .sub-title');
+        const subTitleElement =
+            document.querySelector('.issue-panel-header .sub-title') ||
+            document.querySelector('span[class*="subTitle--"]');
         const subTitle = subTitleElement ? subTitleElement.textContent.trim() : 'No sub-title found';
 
         // Try multiple selectors to find the date
         let reportedDateElement = document.querySelector('.issue-panel-header .reported');
         if (!reportedDateElement) {
             reportedDateElement = document.querySelector('.mapUpdateRequest .reported');
+        }
+        if (!reportedDateElement) {
+            reportedDateElement = document.querySelector('[class*="reported--"]');
         }
         if (!reportedDateElement) {
             reportedDateElement = document.querySelector('[class*="reported"]');
