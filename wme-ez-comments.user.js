@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.11
+// @version      2.5.12
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
 // @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
@@ -47,8 +47,6 @@
 
     // Variables
     let sdk = null;
-    let modalOpen = false;
-    let currentIssueId = null;
 
     const DEFAULT_MESSAGE_TYPES = [
         {
@@ -139,6 +137,8 @@
         "Sat": "Saturday",
         "Sun": "Sunday"
     };
+
+    const dayOfWeekPattern = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/;
 
     function generateTypeId() {
         return 'custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -309,8 +309,6 @@
         // Check if first part is a day of week (3 letters) or month (3 letters)
         // Day of week: Mon, Tue, Wed, Thu, Fri, Sat, Sun
         // Month: Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
-        const dayOfWeekPattern = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/;
-
         if (dateParts.length >= 3) {
             // Check if first part is a day of week
             if (dayOfWeekPattern.test(dateParts[0]) && dateParts.length >= 4) {
@@ -345,27 +343,30 @@
             }
         }
 
-        result = result.replace(/{TYPE}/g, type);
-        // Only replace FULLDATE if we have all required components
-        if (shortMonth && day && year && monthNames[shortMonth]) {
-            result = result.replace(/{FULLDATE}/g, `${monthNames[shortMonth]} ${day}, ${year}`);
-        } else if (shortMonth && day && year) {
-            // Month abbreviation not in monthNames, use as-is
-            result = result.replace(/{FULLDATE}/g, `${shortMonth} ${day}, ${year}`);
+        // Only build FULLDATE from parts if we have all required components
+        // (a month abbreviation not in monthNames is used as-is)
+        let fullDate;
+        if (shortMonth && day && year) {
+            fullDate = `${monthNames[shortMonth] || shortMonth} ${day}, ${year}`;
         } else {
             // Date parsing failed, use raw date string
-            result = result.replace(/{FULLDATE}/g, dateStr);
+            fullDate = dateStr;
         }
-        result = result.replace(/{MONTH}/g, monthNames[shortMonth] || '');
-        result = result.replace(/{SHORTMONTH}/g, shortMonth || '');
-        result = result.replace(/{DAY}/g, day || '');
-        result = result.replace(/{YEAR}/g, year || '');
-        result = result.replace(/{WEEKDAY}/g, weekdayNames[shortWeekday] || '');
-        result = result.replace(/{SHORTWEEKDAY}/g, shortWeekday || '');
-        result = result.replace(/{USERNAME}/g, username);
-        result = result.replace(/{DATE}/g, dateStr);
 
-        return result;
+        const values = {
+            '{TYPE}': type,
+            '{FULLDATE}': fullDate,
+            '{MONTH}': monthNames[shortMonth] || '',
+            '{SHORTMONTH}': shortMonth || '',
+            '{DAY}': day || '',
+            '{YEAR}': year || '',
+            '{WEEKDAY}': weekdayNames[shortWeekday] || '',
+            '{SHORTWEEKDAY}': shortWeekday || '',
+            '{USERNAME}': username,
+            '{DATE}': dateStr
+        };
+
+        return result.replace(/\{[A-Z]+\}/g, m => values[m] ?? m);
     }
 
     function getCommentText(typeId, type, date) {
@@ -373,58 +374,39 @@
         return replacePlaceholders(messageType ? messageType.text : '', type, date);
     }
 
-    function checkModal() {
-        const modal = document.querySelector('.mapUpdateRequest');
-
-        if (modal) {
-            const newIssueId = getIssueIdentifier(modal);
-            const isNewIssue = (newIssueId !== currentIssueId);
-
-            if (!modalOpen || isNewIssue) {
-                modalOpen = true;
-                currentIssueId = newIssueId;
-                insertButton(modal);
-            } else if (!modal.querySelector('.ez-comment-button')) {
-                insertButton(modal);
+    // Find the first match for any selector, looking inside the panel before the whole document
+    function findInPanelOrDocument(selectors) {
+        const panel = document.querySelector('.mapUpdateRequest');
+        for (const root of panel ? [panel, document] : [document]) {
+            for (const selector of selectors) {
+                const element = root.querySelector(selector);
+                if (element) return element;
             }
-        } else if (modalOpen) {
-            modalOpen = false;
-            currentIssueId = null;
         }
+        return null;
     }
 
-    function getIssueIdentifier(modal) {
-        const idElement = modal.querySelector('.issue-id');
-        if (idElement) {
-            return idElement.textContent.trim();
-        }
-        const [title, date] = extractIssueDetails();
-        return `${title}__${date}`;
-    }
-
+    // Read the type and date of the issue currently shown. Called on click so it
+    // always reflects the open issue, even when WME reuses the panel DOM.
     function extractIssueDetails() {
-        const subTitleElement =
-            document.querySelector('.issue-panel-header .sub-title') ||
-            document.querySelector('span[class*="subTitle--"]');
+        const subTitleElement = findInPanelOrDocument([
+            '.issue-panel-header .sub-title',
+            'span[class*="subTitle--"]'
+        ]);
         const subTitle = subTitleElement ? subTitleElement.textContent.trim() : 'No sub-title found';
 
         // Try multiple selectors to find the date
-        let reportedDateElement = document.querySelector('.issue-panel-header .reported');
-        if (!reportedDateElement) {
-            reportedDateElement = document.querySelector('.mapUpdateRequest .reported');
-        }
-        if (!reportedDateElement) {
-            reportedDateElement = document.querySelector('[class*="reported--"]');
-        }
-        if (!reportedDateElement) {
-            reportedDateElement = document.querySelector('[class*="reported"]');
-        }
+        const reportedDateElement = findInPanelOrDocument([
+            '.issue-panel-header .reported',
+            '.mapUpdateRequest .reported',
+            '[class*="reported--"]',
+            '[class*="reported"]'
+        ]);
 
         let reportedDate = '';
 
         if (reportedDateElement) {
             const reportedText = reportedDateElement.textContent.trim();
-            console.log('WME EZ Comments - Found reported element text:', reportedText);
 
             // Extract date and strip time if present
             // Format: "Submitted on: Thu Dec 04 2025, 18:55"
@@ -434,20 +416,12 @@
             if (dateMatch && dateMatch[1]) {
                 // Remove time portion (anything after comma followed by time like ", 18:55")
                 reportedDate = dateMatch[1].replace(/,\s*\d{2}:\d{2}.*$/, '').trim();
-                console.log('WME EZ Comments - Extracted date (time stripped):', reportedDate);
             } else {
                 // Try to extract just the date portion directly
                 const directDateMatch = reportedText.match(/(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{4})/);
-                if (directDateMatch) {
-                    reportedDate = directDateMatch[1];
-                    console.log('WME EZ Comments - Extracted date (direct match):', reportedDate);
-                } else {
-                    console.log('WME EZ Comments - No date pattern matched, using raw text');
-                    reportedDate = reportedText;
-                }
+                reportedDate = directDateMatch ? directDateMatch[1] : reportedText;
             }
         } else {
-            console.log('WME EZ Comments - No reported date element found');
             reportedDate = 'No reported date found';
         }
 
@@ -462,13 +436,7 @@
             return;
         }
 
-        if (modal.querySelector('.ez-comment-button')) {
-            return;
-        }
-
         try {
-            const extracted = extractIssueDetails();
-
             const createButton = (text, templateKey, marginBottom = '5px') => {
                 const button = document.createElement('wz-button');
                 button.setAttribute('type', 'button');
@@ -481,7 +449,8 @@
                 button.addEventListener('mousedown', () => {
                     const wzTextarea = modal.querySelector('.new-comment-form wz-textarea');
                     if (wzTextarea) {
-                        wzTextarea.setAttribute('value', getCommentText(templateKey, extracted[0], extracted[1]));
+                        const [type, date] = extractIssueDetails();
+                        wzTextarea.setAttribute('value', getCommentText(templateKey, type, date));
                         wzTextarea.dispatchEvent(new Event('input'));
                     }
                 });
@@ -491,79 +460,76 @@
 
             const gap = compactButtons ? '3px' : '5px';
             const lastGap = compactButtons ? '20px' : '30px';
+            const fragment = document.createDocumentFragment();
             messageTypes.forEach((messageType, index) => {
                 const marginBottom = index === messageTypes.length - 1 ? lastGap : gap;
-                commentList.parentNode.insertBefore(createButton(messageType.label, messageType.id, marginBottom), newCommentForm);
+                fragment.appendChild(createButton(messageType.label, messageType.id, marginBottom));
             });
+            commentList.parentNode.insertBefore(fragment, newCommentForm);
 
         } catch (error) {
             console.error('Error inserting buttons:', error);
         }
     }
 
-    function setupPanelDetection() {
-        // Listen for update request panel opened event
-        sdk.Events.on({
-            eventName: 'wme-update-request-panel-opened',
-            eventHandler: () => {
-                console.log('Update request panel opened');
-                setTimeout(checkModal, 100);
+    function ensureButtons(panel) {
+        if (!panel.querySelector('.ez-comment-button')) {
+            insertButton(panel);
+        }
+    }
+
+    // Watches only the open update request panel; disconnected when it closes
+    let panelObserver = null;
+    let attachToken = 0;
+
+    // Find the open panel, add buttons, and watch it for re-renders (e.g. switching
+    // to the conversation tab). Does nothing when no panel is open.
+    function attachToPanel() {
+        const token = ++attachToken;
+        const deadline = performance.now() + 2000;
+
+        const tryAttach = () => {
+            if (token !== attachToken) return; // superseded by a newer call
+
+            const panel = document.querySelector('.mapUpdateRequest');
+            if (!panel) {
+                // The panel-opened event can fire before React renders the panel
+                if (performance.now() < deadline) requestAnimationFrame(tryAttach);
+                return;
             }
-        });
 
-        // Also set up mutation observers as fallback
-        const panelObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                for (let i = 0; i < mutation.addedNodes.length; i++) {
-                    const addedNode = mutation.addedNodes[i];
+            ensureButtons(panel);
 
-                    if (addedNode.nodeType === Node.ELEMENT_NODE) {
-                        const mapRequestPanel = addedNode.classList &&
-                            addedNode.classList.contains('mapUpdateRequest') ?
-                            addedNode :
-                            addedNode.querySelector('.mapUpdateRequest');
-
-                        if (mapRequestPanel) {
-                            checkModal();
-                        }
+            if (panelObserver) panelObserver.disconnect();
+            let scheduled = false;
+            const observer = new MutationObserver(() => {
+                if (scheduled) return;
+                scheduled = true;
+                requestAnimationFrame(() => {
+                    scheduled = false;
+                    if (!panel.isConnected) {
+                        observer.disconnect();
+                        if (panelObserver === observer) panelObserver = null;
+                        return;
                     }
-                }
-            });
-        });
-
-        const contentObserver = new MutationObserver(() => {
-            const modal = document.querySelector('.mapUpdateRequest');
-            if (modal) {
-                const newIssueId = getIssueIdentifier(modal);
-
-                if (newIssueId !== currentIssueId) {
-                    currentIssueId = newIssueId;
-                    insertButton(modal);
-                }
-            }
-        });
-
-        panelObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        const checkAndObserveContent = () => {
-            const modal = document.querySelector('.mapUpdateRequest');
-            checkModal();
-
-            if (modal) {
-                contentObserver.disconnect();
-                contentObserver.observe(modal, {
-                    childList: true,
-                    subtree: true,
-                    characterData: true
+                    ensureButtons(panel);
                 });
-            }
+            });
+            observer.observe(panel, { childList: true, subtree: true });
+            panelObserver = observer;
         };
 
-        setInterval(checkAndObserveContent, 1000);
-        checkAndObserveContent();
+        tryAttach();
+    }
+
+    function setupPanelDetection() {
+        sdk.Events.on({
+            eventName: 'wme-update-request-panel-opened',
+            eventHandler: attachToPanel
+        });
+
+        // A panel may already be open (e.g. a permalink to an update request)
+        attachToPanel();
     }
 
     // Escape text for safe interpolation into innerHTML-built markup
@@ -983,7 +949,11 @@
             await sdk.Events.once({ eventName: 'wme-ready' });
             console.log(`${SCRIPT_NAME}: WME ready`);
 
-            // Pull synced settings before building the UI so the tab and buttons use them
+            // Set up panel detection first so buttons don't wait on the network;
+            // they read messageTypes at insert time
+            setupPanelDetection();
+
+            // Pull synced settings before building the settings tab so it uses them
             if (loadSyncEnabled()) {
                 try {
                     await startSync();
@@ -995,9 +965,6 @@
 
             // Create settings tab
             await createSettingsTab();
-
-            // Set up panel detection
-            setupPanelDetection();
 
             console.log(`${SCRIPT_NAME} initialized successfully!`);
         } catch (error) {
