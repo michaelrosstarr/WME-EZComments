@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         WME EZ Comments
 // @namespace    http://tampermonkey.net/
-// @version      2.5.12
+// @version      2.6.0
 // @description  Customizable quick comments for Waze Map Editor with placeholder support
 // @author       https://github.com/michaelrosstarr
-// @homepageURL  https://github.com/michaelrosstarr/WME-EZComments
-// @supportURL   https://github.com/michaelrosstarr/WME-EZComments/issues
-// @updateURL    https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/wme-ez-comments.user.js
-// @downloadURL  https://raw.githubusercontent.com/michaelrosstarr/WME-EZComments/main/wme-ez-comments.user.js
+// @homepageURL  https://wmekit.com/wme-ez-comment
+// @supportURL   https://github.com/wmekit/WME-EZComments/issues
+// @updateURL    https://raw.githubusercontent.com/wmekit/WME-EZComments/main/wme-ez-comments.user.js
+// @downloadURL  https://raw.githubusercontent.com/wmekit/WME-EZComments/main/wme-ez-comments.user.js
 // @match        https://www.waze.com/*/editor*
 // @match        https://www.waze.com/editor*
 // @match        https://beta.waze.com/*/editor*
@@ -16,6 +16,7 @@
 // @exclude      https://beta.waze.com/user/editor*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=waze.com
 // @require      https://sync.wazetools.com/wme-sync-lib.js
+// @require      https://cdn.jsdelivr.net/gh/wmekit/wmekit-wme-ui@1.1.0/dist/wmekit-wme-ui.min.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -532,14 +533,6 @@
         attachToPanel();
     }
 
-    // Escape text for safe interpolation into innerHTML-built markup
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str ?? '';
-        return div.innerHTML;
-    }
-
-    // Create settings tab UI
     // Returns a positive number if version a is newer than b
     function compareVersions(a, b) {
         const pa = a.split('.').map(Number);
@@ -581,6 +574,8 @@
     }
 
     async function createSettingsTab() {
+        const { createPane, header, card, toggle, button, textInput, textArea, field, pill, ICONS } = WMEKitUI;
+
         // Register the tab using SDK - call without parameters
         const { tabLabel, tabPane } = await sdk.Sidebar.registerScriptTab();
 
@@ -588,159 +583,189 @@
         tabLabel.innerText = SCRIPT_NAME;
         tabLabel.title = 'Customize quick comment templates';
 
-        // Create the content
-        const tabContent = document.createElement('div');
-        tabContent.id = 'ezc-settings';
-        tabContent.innerHTML = `
-            <style>
-                /* Neutralize WME's global button styles so labels sit centered */
-                #ezc-settings button {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    box-sizing: border-box;
-                    height: auto;
-                    min-height: 0;
-                    min-width: 0;
-                    margin: 0;
-                    line-height: 1.2;
-                    font-family: inherit;
-                    text-transform: none;
-                    letter-spacing: normal;
-                    vertical-align: middle;
-                    cursor: pointer;
-                }
-                #ezc-settings button:disabled {
-                    opacity: 0.4;
-                    cursor: default;
-                }
-            </style>
-            <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;">
-                <h3 style="margin-top: 0;">${SCRIPT_NAME} v${SCRIPT_VERSION}</h3>
-                <div style="margin-bottom: 15px;">
-                    <button id="ezc-update-btn" style="background: white; color: #0066cc; border: 1px solid #0066cc; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">Check for Update</button>
-                    <span id="ezc-update-status" style="margin-left: 8px; font-size: 12px; color: #666;"></span>
-                </div>
-                <p style="color: #666; margin-bottom: 20px;">Customize your quick comment message types. Use placeholders to make templates dynamic.</p>
+        const root = createPane(tabPane, { id: 'ezc-settings' });
 
-                <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h4 style="margin-top: 0;">Available Placeholders:</h4>
-                    <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; font-size: 12px;">
-                        ${Object.entries(PLACEHOLDERS).map(([key, desc]) =>
-            `<div style="font-weight: bold; color: #0066cc;">${key}</div><div>${desc}</div>`
-        ).join('')}
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">Custom Username (Optional):</label>
-                    <input type="text" id="ezc-custom-username" placeholder="Leave blank to use your Waze username" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;" />
-                    <p style="color: #666; font-size: 12px; margin-top: 5px;">If set, this will be used instead of your Waze username for the {USERNAME} placeholder.</p>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer;">
-                        <input type="checkbox" id="ezc-compact-buttons" style="width: 16px; height: 16px; cursor: pointer;" />
-                        Compact Buttons
-                    </label>
-                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Shrinks the message type buttons in the reply panel and tightens the spacing between them.</p>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer;">
-                        <input type="checkbox" id="ezc-sync-enabled" style="width: 16px; height: 16px; cursor: pointer;" />
-                        Enable Cloud Sync
-                    </label>
-                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Syncs your message types, custom username and compact setting across browsers via WME Sync. The first time, you'll be shown a PIN for your Waze username &mdash; write it down and use it to sign in on other browsers.</p>
-                    <p style="font-size: 12px; margin-top: 5px;">Status: <span id="ezc-sync-status">Off</span>
-                        <button id="ezc-sync-logout-btn" title="Sign this browser out of WME Sync. You can sign in again with your PIN." style="margin-left: 8px; background: white; color: #dc3545; border: 1px solid #dc3545; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Sign out</button>
-                    </p>
-                    <div id="ezc-sync-login" style="margin-top: 10px;">
-                        <label style="display: block; font-size: 12px; margin-bottom: 5px;">Already synced in another browser? Enter the PIN for your Waze username to load your settings:</label>
-                        <div style="display: flex; gap: 8px;">
-                            <input type="password" id="ezc-sync-pin" inputmode="numeric" autocomplete="off" placeholder="WME Sync PIN" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;" />
-                            <button id="ezc-sync-login-btn" style="background: #0066cc; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;">Sign in &amp; Sync</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
-                    <h4 style="margin-top: 0; margin-bottom: 10px;">Preview Message Types</h4>
-                    <p style="color: #666; font-size: 12px; margin-bottom: 10px;">See how your message types will look with sample data</p>
-                    <button id="ezc-preview-btn" style="background: #ffc107; color: #000; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;">Generate Preview</button>
-                    <div id="ezc-preview-container" style="display: none;"></div>
-                </div>
-
-                <div style="margin-bottom: 25px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <label style="font-weight: bold;">Message Types (Buttons):</label>
-                        <button id="ezc-add-type-btn" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">+ Add Message Type</button>
-                    </div>
-                    <p style="color: #666; font-size: 12px; margin-bottom: 10px;">Each message type below adds its own button to the reply panel. Add as many as you like &mdash; for example a "Thanks for letting us know" type &mdash; with your own label, order, and message text.</p>
-                    <div id="ezc-type-list"></div>
-                </div>
-
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <button id="ezc-save-btn" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: bold;">Save All</button>
-                    <button id="ezc-reset-btn" style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: bold;">Reset to Defaults</button>
-                </div>
-
-                <div id="ezc-status" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
-            </div>
-        `;
-
-        // Append content to the tabPane
-        tabPane.appendChild(tabContent);
+        const div = (className, text) => {
+            const node = document.createElement('div');
+            if (className) node.className = className;
+            if (text !== undefined) node.textContent = text;
+            return node;
+        };
+        const row = (...children) => {
+            const node = div('kit-row');
+            node.append(...children);
+            return node;
+        };
 
         // Working copy of message types edited in this tab. Nothing is persisted
         // until "Save All" is clicked.
         let draftTypes = messageTypes.map(t => ({ ...t }));
 
-        const typeListEl = tabContent.querySelector('#ezc-type-list');
+        // Header with update check
+        const head = header({ title: SCRIPT_NAME, icon: ICONS.message, pills: ['v' + SCRIPT_VERSION] });
+        const updateStatus = document.createElement('span');
+        updateStatus.className = 'kit-status kit-muted';
+        const updateBtn = button({ label: 'Check for update', variant: 'secondary', size: 'sm', onClick: checkForUpdate });
+        const updateRow = row(updateBtn, updateStatus);
+        updateRow.style.marginTop = '10px';
+        head.el.insertBefore(updateRow, head.el.querySelector('.kit-notice'));
+
+        // Settings
+        const customUsernameInput = textInput({ placeholder: 'Leave blank to use your Waze username' });
+        const compactToggle = toggle({
+            label: 'Compact buttons',
+            hint: 'Smaller message type buttons with tighter spacing in the reply panel.',
+            checked: compactButtons
+        });
+        const compactButtonsInput = compactToggle.querySelector('input');
+
+        // Cloud sync
+        const syncToggle = toggle({
+            label: 'Enable cloud sync',
+            hint: "Syncs message types, username and compact setting across browsers via WME Sync. The first time you'll be shown a PIN for your Waze username - keep it to sign in elsewhere.",
+            checked: !!sync
+        });
+        const syncEnabledInput = syncToggle.querySelector('input');
+        const syncStatusEl = document.createElement('span');
+        const syncLogoutBtn = button({
+            label: 'Sign out',
+            variant: 'danger',
+            size: 'sm',
+            title: 'Sign this browser out of WME Sync. You can sign in again with your PIN.',
+            onClick: signOut
+        });
+        const syncStatusRow = row(div('kit-muted', 'Status:'), syncStatusEl, syncLogoutBtn);
+        const syncPinInput = textInput({ type: 'password', inputMode: 'numeric', placeholder: 'WME Sync PIN' });
+        syncPinInput.autocomplete = 'off';
+        const syncLoginBtn = button({ label: 'Sign in & sync', onClick: signInWithPin });
+        const syncLoginEl = field({
+            label: 'Already synced in another browser?',
+            hint: 'Enter the PIN for your Waze username to load your settings.',
+            control: row(syncPinInput, syncLoginBtn)
+        });
+
+        // Message types. Placeholder pills insert into the last focused template.
+        let lastFocusedTextarea = null;
+        const placeholderPills = div('kit-pills');
+        placeholderPills.style.margin = '8px 0 4px';
+        Object.entries(PLACEHOLDERS).forEach(([token, description]) => {
+            placeholderPills.appendChild(pill(token, { title: description, onClick: () => insertPlaceholder(token) }));
+        });
+        const typeListEl = div();
+
+        // Preview
+        const previewContainer = div();
+        previewContainer.hidden = true;
+
+        const statusEl = document.createElement('div');
+        statusEl.hidden = true;
+
+        root.append(
+            head.el,
+            card({
+                title: 'Settings',
+                children: [
+                    field({
+                        label: 'Custom username',
+                        hint: 'Used instead of your Waze username for {USERNAME}.',
+                        control: customUsernameInput
+                    }),
+                    compactToggle
+                ]
+            }),
+            card({ title: 'Cloud sync', children: [syncToggle, syncStatusRow, syncLoginEl] }),
+            card({
+                title: 'Message types',
+                children: [
+                    div('kit-muted', 'Each type adds a button to the reply panel. Click a placeholder to insert it at the cursor.'),
+                    placeholderPills,
+                    typeListEl,
+                    button({
+                        label: '+ Add message type',
+                        variant: 'secondary',
+                        onClick: () => {
+                            draftTypes.push({ id: generateTypeId(), label: 'New Message', text: '' });
+                            renderTypeList();
+                        }
+                    })
+                ]
+            }),
+            card({
+                title: 'Preview',
+                children: [
+                    button({ label: 'Generate preview', variant: 'secondary', onClick: renderPreview }),
+                    previewContainer
+                ]
+            }),
+            row(
+                button({ label: 'Save all', onClick: saveAll }),
+                button({ label: 'Reset to defaults', variant: 'danger', onClick: resetToDefaults })
+            ),
+            statusEl
+        );
 
         function renderTypeList() {
-            typeListEl.innerHTML = draftTypes.map((mt, index) => `
-                <div class="ezc-type-row" data-index="${index}" style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 12px; background: #fafafa;">
-                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-                        <input type="text" class="ezc-type-label" value="${escapeHtml(mt.label)}" placeholder="Button label" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-weight: bold;" />
-                        <button class="ezc-move-up" title="Move up" ${index === 0 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; color: #333; font-size: 14px;">&uarr;</button>
-                        <button class="ezc-move-down" title="Move down" ${index === draftTypes.length - 1 ? 'disabled' : ''} style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; background: white; color: #333; font-size: 14px;">&darr;</button>
-                        <button class="ezc-delete-type" title="Delete this message type" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">&times;</button>
-                    </div>
-                    <textarea class="ezc-type-text" placeholder="Message text" style="width: 100%; height: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;">${escapeHtml(mt.text)}</textarea>
-                </div>
-            `).join('');
+            lastFocusedTextarea = null;
+            typeListEl.replaceChildren(...draftTypes.map((mt, index) => {
+                const labelInput = textInput({
+                    value: mt.label,
+                    placeholder: 'Button label',
+                    onInput: (value) => { draftTypes[index].label = value; }
+                });
+                const upBtn = button({
+                    label: '↑',
+                    variant: 'secondary',
+                    size: 'sm',
+                    title: 'Move up',
+                    disabled: index === 0,
+                    onClick: () => {
+                        [draftTypes[index - 1], draftTypes[index]] = [draftTypes[index], draftTypes[index - 1]];
+                        renderTypeList();
+                    }
+                });
+                const downBtn = button({
+                    label: '↓',
+                    variant: 'secondary',
+                    size: 'sm',
+                    title: 'Move down',
+                    disabled: index === draftTypes.length - 1,
+                    onClick: () => {
+                        [draftTypes[index + 1], draftTypes[index]] = [draftTypes[index], draftTypes[index + 1]];
+                        renderTypeList();
+                    }
+                });
+                const deleteBtn = button({
+                    label: '×',
+                    variant: 'danger',
+                    size: 'sm',
+                    title: 'Delete this message type',
+                    onClick: () => {
+                        draftTypes.splice(index, 1);
+                        renderTypeList();
+                    }
+                });
+                const textEl = textArea({
+                    value: mt.text,
+                    placeholder: 'Message text',
+                    rows: 5,
+                    monospace: true,
+                    onInput: (value) => { draftTypes[index].text = value; }
+                });
+                textEl.addEventListener('focus', () => { lastFocusedTextarea = textEl; });
 
-            typeListEl.querySelectorAll('.ezc-type-row').forEach(row => {
-                const index = Number(row.dataset.index);
-
-                row.querySelector('.ezc-type-label').addEventListener('input', (e) => {
-                    draftTypes[index].label = e.target.value;
-                });
-                row.querySelector('.ezc-type-text').addEventListener('input', (e) => {
-                    draftTypes[index].text = e.target.value;
-                });
-                row.querySelector('.ezc-move-up').addEventListener('click', () => {
-                    if (index === 0) return;
-                    [draftTypes[index - 1], draftTypes[index]] = [draftTypes[index], draftTypes[index - 1]];
-                    renderTypeList();
-                });
-                row.querySelector('.ezc-move-down').addEventListener('click', () => {
-                    if (index === draftTypes.length - 1) return;
-                    [draftTypes[index + 1], draftTypes[index]] = [draftTypes[index], draftTypes[index + 1]];
-                    renderTypeList();
-                });
-                row.querySelector('.ezc-delete-type').addEventListener('click', () => {
-                    draftTypes.splice(index, 1);
-                    renderTypeList();
-                });
-            });
+                const item = div('kit-field');
+                item.append(row(labelInput, upBtn, downBtn, deleteBtn), textEl);
+                return item;
+            }));
         }
 
-        const customUsernameInput = tabContent.querySelector('#ezc-custom-username');
-        const compactButtonsInput = tabContent.querySelector('#ezc-compact-buttons');
-        const syncEnabledInput = tabContent.querySelector('#ezc-sync-enabled');
-        const syncStatusEl = tabContent.querySelector('#ezc-sync-status');
+        function insertPlaceholder(token) {
+            const target = lastFocusedTextarea?.isConnected ? lastFocusedTextarea : typeListEl.querySelector('textarea');
+            if (!target) return;
+            target.focus();
+            target.setRangeText(token, target.selectionStart, target.selectionEnd, 'end');
+            target.dispatchEvent(new Event('input'));
+        }
 
         // Reset the form from the saved settings (e.g. after pulling from the cloud)
         function refreshForm() {
@@ -752,15 +777,10 @@
 
         refreshForm();
 
-        const syncLoginEl = tabContent.querySelector('#ezc-sync-login');
-        const syncPinInput = tabContent.querySelector('#ezc-sync-pin');
-        const syncLoginBtn = tabContent.querySelector('#ezc-sync-login-btn');
-        const syncLogoutBtn = tabContent.querySelector('#ezc-sync-logout-btn');
-
         function setSyncUi(status) {
             syncEnabledInput.checked = !!sync;
-            syncLoginEl.style.display = sync ? 'none' : 'block';
-            syncLogoutBtn.style.display = sync ? 'inline-block' : 'none';
+            syncLoginEl.hidden = !!sync;
+            syncLogoutBtn.hidden = !sync;
             syncStatusEl.textContent = status;
         }
 
@@ -801,7 +821,7 @@
             }
         });
 
-        syncLogoutBtn.addEventListener('click', async () => {
+        async function signOut() {
             if (!confirm('Sign this browser out of WME Sync? Your settings stay saved here, and you can sign in again with your PIN.')) {
                 return;
             }
@@ -817,16 +837,16 @@
                 setSyncUi('Off');
                 syncLogoutBtn.disabled = false;
             }
-        });
+        }
 
-        syncLoginBtn.addEventListener('click', () => {
+        function signInWithPin() {
             const pin = syncPinInput.value.trim();
             if (!/^\d{6,12}$/.test(pin)) {
                 showStatus('Enter your WME Sync PIN (6-12 digits).', 'error');
                 return;
             }
             enableSync(pin);
-        });
+        }
 
         // Push to the cloud after a local save; the local save has already succeeded.
         async function pushAndReport(successMessage) {
@@ -841,12 +861,7 @@
             }
         }
 
-        tabContent.querySelector('#ezc-add-type-btn').addEventListener('click', () => {
-            draftTypes.push({ id: generateTypeId(), label: 'New Message', text: '' });
-            renderTypeList();
-        });
-
-        tabContent.querySelector('#ezc-save-btn').addEventListener('click', async () => {
+        async function saveAll() {
             messageTypes = draftTypes.map(t => ({ ...t }));
             saveMessageTypes(messageTypes);
 
@@ -857,9 +872,9 @@
             saveCompactButtons(compactButtons);
 
             await pushAndReport('Message types and settings saved successfully!');
-        });
+        }
 
-        tabContent.querySelector('#ezc-reset-btn').addEventListener('click', async () => {
+        async function resetToDefaults() {
             if (confirm('Are you sure you want to reset all message types to defaults? This removes any custom message types you added.')) {
                 messageTypes = DEFAULT_MESSAGE_TYPES.map(t => ({ ...t }));
                 saveMessageTypes(messageTypes);
@@ -867,36 +882,40 @@
                 renderTypeList();
                 await pushAndReport('Message types reset to defaults!');
             }
-        });
+        }
 
-        const updateBtn = tabContent.querySelector('#ezc-update-btn');
-        const updateStatus = tabContent.querySelector('#ezc-update-status');
-        updateBtn.addEventListener('click', async () => {
+        async function checkForUpdate() {
             updateBtn.disabled = true;
-            updateStatus.style.color = '#666';
+            updateStatus.className = 'kit-status kit-muted';
             updateStatus.textContent = 'Checking...';
+            head.setNotice(null);
             try {
                 const { version: latest, url } = await fetchLatestRelease();
                 if (compareVersions(latest, SCRIPT_VERSION) > 0) {
-                    updateStatus.style.color = '#155724';
-                    updateStatus.textContent = `v${latest} is available.`;
-                    if (confirm(`${SCRIPT_NAME} v${latest} is available (you have v${SCRIPT_VERSION}).\n\nOpen the update page now? Reload WME after installing.`)) {
-                        window.open(url, '_blank');
-                    }
+                    updateStatus.textContent = '';
+                    const notice = document.createElement('span');
+                    notice.append(`v${latest} is available - `);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.textContent = 'install update';
+                    notice.append(link, ', then reload WME.');
+                    head.setNotice(notice);
                 } else {
-                    updateStatus.style.color = '#155724';
+                    updateStatus.className = 'kit-status kit-status-success';
                     updateStatus.textContent = `You're up to date (v${SCRIPT_VERSION}).`;
                 }
             } catch (error) {
                 console.error(`${SCRIPT_NAME}: update check failed`, error);
-                updateStatus.style.color = '#721c24';
+                updateStatus.className = 'kit-status kit-status-error';
                 updateStatus.textContent = `Update check failed: ${error.message}`;
             } finally {
                 updateBtn.disabled = false;
             }
-        });
+        }
 
-        tabContent.querySelector('#ezc-preview-btn').addEventListener('click', () => {
+        function renderPreview() {
             const sampleType = 'Map Issue';
             const sampleDate = 'Mon Feb 10 2026';
 
@@ -904,30 +923,28 @@
             const originalUsername = customUsername;
             customUsername = customUsernameInput.value.trim() || 'Waze Volunteer';
 
-            const previewContainer = tabContent.querySelector('#ezc-preview-container');
-            previewContainer.innerHTML = draftTypes.map(mt => `
-                <div style="margin-bottom: 15px;">
-                    <strong style="display: block; margin-bottom: 5px;">${escapeHtml(mt.label)}:</strong>
-                    <div style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 12px;">${escapeHtml(replacePlaceholders(mt.text, sampleType, sampleDate))}</div>
-                </div>
-            `).join('');
-            previewContainer.style.display = 'block';
+            previewContainer.replaceChildren(...draftTypes.map(mt => {
+                const item = div('kit-field');
+                const text = div('kit-textarea', replacePlaceholders(mt.text, sampleType, sampleDate));
+                text.style.whiteSpace = 'pre-wrap';
+                text.style.fontSize = '12px';
+                item.append(div('kit-field-label', mt.label), text);
+                return item;
+            }));
+            previewContainer.hidden = false;
 
             customUsername = originalUsername;
-        });
+        }
 
+        let statusTimer = null;
         function showStatus(message, type) {
-            const statusDiv = tabContent.querySelector('#ezc-status');
-            if (!statusDiv) return;
+            statusEl.textContent = message;
+            statusEl.className = `kit-status kit-status-${type}`;
+            statusEl.hidden = false;
 
-            statusDiv.textContent = message;
-            statusDiv.style.display = 'block';
-            statusDiv.style.background = type === 'success' ? '#d4edda' : '#f8d7da';
-            statusDiv.style.color = type === 'success' ? '#155724' : '#721c24';
-            statusDiv.style.border = `1px solid ${type === 'success' ? '#c3e6cb' : '#f5c6cb'}`;
-
-            setTimeout(() => {
-                statusDiv.style.display = 'none';
+            clearTimeout(statusTimer);
+            statusTimer = setTimeout(() => {
+                statusEl.hidden = true;
             }, 3000);
         }
     }

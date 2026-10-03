@@ -12,6 +12,7 @@ Quick comment templates for Waze Map Editor with automatic placeholders.
 - One-click comment buttons
 - Custom username option
 - Optional cloud sync of your settings across browsers
+- Settings tab in the [WME Kit](https://wmekit.com) style that follows WME's dark mode
 
 ## Installation
 
@@ -26,7 +27,7 @@ The script updates automatically through your userscript manager, which periodic
 
 > **Already installed an older copy?** The script file was renamed to `wme-ez-comments.user.js` in v2.5.4, so copies older than that won't find updates. Remove the old copy from your userscript manager and reinstall once using the link above. After that, updates are automatic.
 
-**Maintainers:** on every release pushed to `main`, bump `@version` in the header (the script reads its version from there). Userscript managers only install an update when `@version` increases. The "Check for Update" button sees a new release immediately, but the userscript manager's own background check reads a GitHub address that is cached for up to 5 minutes.
+**Maintainers:** on every release pushed to `main`, bump `@version` in the header (the script reads its version from there). Userscript managers only install an update when `@version` increases. The "Check for update" button sees a new release immediately, but the userscript manager's own background check reads a GitHub address that is cached for up to 5 minutes.
 
 ## Placeholders
 
@@ -49,12 +50,8 @@ Add these to your templates and they'll auto-fill:
 
 1. Open the **WME EZ Comments** tab in the sidebar
 2. (Optional) Set a custom username
-3. Edit your templates:
-   - **Initial** - First response
-   - **Follow Up** - Second reminder
-   - **Final Follow Up** - Last warning
-   - **Close** - Closing message
-4. Click **Save**
+3. Edit your message types under **Message types**. Use the ↑ ↓ buttons to reorder, × to delete, and **+ Add message type** to add more. Click a placeholder pill (e.g. `{FULLDATE}`) to insert it at the cursor in the template you're editing.
+4. Click **Save all**
 
 ### Using the Buttons
 
@@ -67,12 +64,12 @@ Add these to your templates and they'll auto-fill:
 
 Cloud sync is off by default. When you turn it on, your message types, custom username and compact button setting are kept in sync across browsers and machines through [WME Sync](https://sync.wazetools.com).
 
-1. Open the **WME EZ Comments** tab and tick **Enable Cloud Sync**
+1. Open the **WME EZ Comments** tab and turn on **Enable cloud sync**
 2. The first time, a PIN is shown. Write it down.
-3. In another browser, type that PIN into the **WME Sync PIN** box and click **Sign in & Sync**. Your settings are loaded straight away. You can also tick **Enable Cloud Sync** and enter the PIN when asked.
-4. Click **Save All** after making changes to push them to the cloud
+3. In another browser, type that PIN into the **WME Sync PIN** box and click **Sign in & sync**. Your settings are loaded straight away. You can also turn on **Enable cloud sync** and enter the PIN when asked.
+4. Click **Save all** after making changes to push them to the cloud
 
-Each Waze username has one PIN, and every browser signs in with that same PIN. To sign a browser out, for example after entering a mistyped PIN, click **Sign out** next to the sync status. This browser forgets its sign-in and PIN, but your settings stay saved locally. You can then enter your PIN again and click **Sign in & Sync**.
+Each Waze username has one PIN, and every browser signs in with that same PIN. To sign a browser out, for example after entering a mistyped PIN, click **Sign out** next to the sync status. This browser forgets its sign-in and PIN, but your settings stay saved locally. You can then enter your PIN again and click **Sign in & sync**.
 
 Synced settings are loaded when WME starts and override the local copy. If the sync server can't be reached, the script keeps using your locally saved settings.
 
@@ -97,6 +94,11 @@ Can you provide more details?
 ```
 
 ## Changelog
+
+### v2.6.0
+- Redesigned the settings tab with [wmekit-wme-ui](https://github.com/wmekit/wmekit-wme-ui): it now matches other WME Kit scripts and follows WME's dark mode
+- Placeholders are shown as clickable pills that insert into the template you're editing
+- "Check for update" shows a notice with an install link instead of a confirm dialog
 
 ### v2.5.4
 - Script version is now read from the `@version` header, fixing the update check reporting the wrong version
